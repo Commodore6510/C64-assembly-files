@@ -1,0 +1,210 @@
+; CBM PRG Studio assembly syntax
+*=$C000
+SCREENRAM1 = $0400
+SCREENRAM2 = $0C00
+Yscroll_Flag = $FB
+
+SPR0_PTR = $3F8
+COLOR0   = $D027
+SP0X     = $D000
+SP0Y     = $D001
+MSBX     = $D010
+SP0VAL   = $0340
+
+ENABLE   = $D015
+YEXPAND  = $D017
+XEXPAND  = $D01D
+MULTICOL = $D01C
+
+
+;background color
+        LDA #$00
+        STA $D020
+        STA $D021
+; CIA timers off
+        LDA #$7F
+        STA $DD0D
+        STA $DC0D
+; acknowledges CIA timers' interrupts
+        LDA $DD0D
+        LDA $DC0D
+        JSR Sprite_Init
+        JSR SID_init
+; reset Yscroll default value
+; 24 lines mode set
+        LDA #$10        ; bit 4 = 24 lines bit#0-3(softscroll)=0
+        STA $D011
+        LDA #$07
+        STA Yscroll_Flag ; Yscroll_Flag is used to count incrementations and shifts 
+                         ; of bit#0-2 values at $D011 on each soft scroll
+mainloop   
+; screen memory pointer = $400/1024
+; switch to SCREENRAM1
+        LDA $D018       ; 
+        AND #%00011111
+        ORA #%00010000 ; screen memory Bit #4-7 = 1*1024
+        STA $D018
+; prepare SCREENRAM2
+        JSR Buffer2
+; smoothscroll SCREENRAM1
+        JSR Smoothscroll
+; screen memory pointer = $C00/3072
+; switch to SCREENRAM2
+        LDA $D018
+        AND #%00011111
+        ORA #%00110000 ; screen memory Bit #4-7 = 3*1024
+        STA $D018
+; prepare SCREENRAM1
+        JSR Buffer1
+; smoothscroll SCREENRAM2
+        JSR Smoothscroll
+; back to mainloop
+        JMP mainloop
+
+SID_Init
+; Init SID's voice 3 frquency to generate random number
+; in register at $D41B
+        LDA #$FF  ; maximum frequency value
+        STA $D40E ; voice 3 frequency low byte
+        STA $D40F ; voice 3 frequency high byte
+        LDA #$80  ; noise waveform, gate bit off
+        STA $D412 ; voice 3 control register
+        RTS
+
+Smoothscroll
+@raster
+        BIT $D011
+        BPL *-3
+        BIT $D011
+        BMI *-3         ; raster = 0
+        ;INC Yscroll_Flag
+        INC $D011
+        DEC Yscroll_Flag
+        BNE @raster ; loop until Yscroll_Flag =0
+@raster2
+        BIT $D011
+        BPL *-3
+        BIT $D011
+        BMI *-3         ; raster = 0
+; reset Yscroll_flag to default value
+        LDA #$07        
+        STA Yscroll_Flag
+; reset Yscroll to default value
+        LDA #$10        ; bit 4 = 24 lines bit#0-3(softscroll)=0
+        STA $D011
+        RTS
+
+Buffer2
+; Screenram1 copied to Screenram2 except first row
+        LDX #240        ; 4*240 = 960
+Loop1
+        LDA SCREENRAM1-1,X
+        STA SCREENRAM2+39,X
+        LDA SCREENRAM1+239,X
+        STA SCREENRAM2+279,X
+        LDA SCREENRAM1+479,X
+        STA SCREENRAM2+519,X
+        LDA SCREENRAM1+719,X
+        STA SCREENRAM2+759,X
+        DEX
+        BNE Loop1
+; deals with first row 
+; creates rare rain effect
+        LDX #40         ; first row is 40 characters long
+@First_row
+        LDA $D41B       ; get SID random value from 0-255
+        EOR $DC04
+        CMP #254        ; 98% cases excluded
+        BCS @cont       ; if A > 250 (less probable case)
+        LDA #$20
+        JMP @plot
+@cont
+        LDA #$2E
+@plot
+        STA SCREENRAM2-1,X
+        DEX
+        BNE @First_row
+        RTS
+
+Buffer1
+        LDX #240
+Loop2
+        LDA SCREENRAM2-1,X
+        STA SCREENRAM1+39,X
+        LDA SCREENRAM2+239,X
+        STA SCREENRAM1+279,X
+        LDA SCREENRAM2+479,X
+        STA SCREENRAM1+519,X
+        LDA SCREENRAM2+719,X
+        STA SCREENRAM1+759,X
+        DEX
+        BNE Loop2
+; deals with first row 
+; creates rare rain effect
+        LDX #40         ; first row is 40 characters long
+@First_row
+        LDA $D41B       ; get SID random value from 0-255
+        EOR $DC04
+        CMP #253        ; 98% cases excluded
+        BCS @cont       ; if A > 250 (less probable case)
+        LDA #$20
+        JMP @plot
+@cont
+        LDA #$2E
+@plot
+        STA SCREENRAM1-1,X
+        DEX
+        BNE @First_row
+        RTS
+
+
+SPRITE_Init                
+        LDA #$0D        ; using block 13, ie 13x64=$340/832 for sprite0 
+        STA SCREENRAM1+SPR0_PTR ; there ar 2 screen rams and therefore
+        STA SCREENRAM2+SPR0_PTR ; 2 sprite pointers area
+        LDA #01         ; enable sprite0
+        STA ENABLE
+        LDA #01        ; white for sprite0
+        STA COLOR0
+
+BUILD   LDA DATA,X      ; copies 63 sprite data bytes 
+        STA SP0VAL,X    ; to block 13 in 
+
+        INX
+        CPX #63         ; 63 bytes
+        BNE BUILD
+        
+        ;position
+        LDA #0          ;stick with x0-255
+        STA MSBX
+        
+        ; sprite location
+        LDX #184
+        LDY #221
+        STX SP0X
+        STY SP0Y
+        RTS
+
+DATA
+         byte $00,$7E,$00
+         byte $00,$E7,$00
+         byte $01,$BD,$80
+         byte $03,$7E,$C0
+         byte $03,$FF,$C0
+         byte $03,$FF,$C0
+         byte $03,$FF,$C0
+         byte $01,$FF,$80
+         byte $00,$FF,$00
+         byte $00,$7E,$00
+         byte $0C,$3C,$30
+         byte $0E,$7E,$70
+         byte $0E,$FF,$70
+         byte $0F,$BD,$F0
+         byte $0F,$3C,$F0
+         byte $0E,$3C,$70
+         byte $0E,$18,$70
+         byte $0E,$18,$70
+         byte $0E,$00,$70
+         byte $0E,$00,$70
+         byte $06,$00,$60
+
