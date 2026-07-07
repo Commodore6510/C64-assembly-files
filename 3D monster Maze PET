@@ -1,0 +1,8238 @@
+; ============================================================================
+; 3D MONSTER MAZE (PET) - desassemblage annote, adresses d'origine ($0401)
+; ============================================================================
+; Base : le fichier fourni par Philippe (verifie fonctionnel sur PET reel).
+;
+; Travail effectue dans cette passe :
+;   1) Toutes les zones qui n'etaient pas encore marquees comme des donnees
+;      (tables de caracteres/ecran, restes d'opcodes illegaux issus d'un
+;      desassemblage lineaire naif) ont ete converties en BYTE. 1622 lignes
+;      converties en plus des 477 deja marquees par Philippe.
+;   2) Verification : le fichier reassemble produit un binaire IDENTIQUE
+;      OCTET PAR OCTET a 3d_monster_maze_1_.prg (verifie avec ACME).
+;   3) Commentaires de bloc ajoutes pour les ~27 routines d'infrastructure
+;      comprises avec un niveau de confiance eleve : le point d'entree, le
+;      trampoline d'appel auto-modifiant, le lecteur clavier bas niveau,
+;      le clignotement du curseur, l'enveloppe CHROUT, les primitives de
+;      l'interprete bytecode (avancer/reculer le pointeur, empiler/depiler
+;      des parametres, tester la fin de sequence), et la table de decalages
+;      d'ecran.
+;
+; CE QUI N'EST PAS COUVERT : le gros du fichier (logique du labyrinthe,
+; rendu 3D, IA des monstres, collisions...) n'a pas ete analyse instruction
+; par instruction -- l'annoter avec la meme rigueur demanderait de tracer
+; chaque routine individuellement. Dis-moi quelles zones t'interessent en
+; priorite (par exemple celles autour du blocage a $30D7 relogé, soit
+; $2CDB en adresses PET d'origine) et je les detaille specifiquement.
+; ============================================================================
+
+*=$0401
+; BASIC
+        BYTE $0B,$04,$20,$03,$9E,$31,$30,$33,$37,$00,$00,$00
+; début du programme en LM
+; === POINT D'ENTREE (SYS 1037) ===
+; ; Sauvegarde $55-$6E (zone de travail de l'interpreteur) dans le tampon $4280,
+; ; bascule l'ecran en minuscules (CHR$14), initialise le pointeur bytecode
+; ; $55/$56 a partir de $34/$35 (MEMSIZ), appelle l'init $044D (code mort, cf.
+; ; plus bas), $2AFB et $2B70, restaure $55-$6E, restaure la pile et rend la main
+; ; au BASIC (RTS apres le SYS).
+        LDX #$19
+        LDA $55,X
+        STA $4280,X
+        DEX 
+        BPL $040F
+        LDA $D1      ;FNLEN  Length of Current File Name
+        PHA 
+; Set screen to lowercase mode by calling CHROUT with CHR$(14)
+        LDA #$0E
+        JSR $2C9A
+        PLA 
+        STA $D1      ;FNLEN  Length of Current File Name
+        JSR $302C
+        TSX 
+        STX $4A0F
+        LDA $34      ;MEMSIZ Pointer: Highest Address Used by BASIC
+        STA $55
+        LDA $35
+        STA $56
+        JSR $044D
+        JSR $2AFB
+        PHA 
+        JSR $2B70
+        LDX #$19
+        LDA $4280,X
+        STA $55,X
+        DEX 
+        BPL $043D
+        PLA 
+        STA $96      ;STATUS Kernal I/O Status Word: ST
+        LDX $4A0F
+        TXS 
+        RTS 
+
+; --- Routine jamais executee (code mort) ---
+; ; LDY #$00 puis BEQ toujours pris : la sequence LDA#$59/LDX#$04/JMP $4257
+; ; (appel indirect via le trampoline vers $0459) n'est en pratique jamais
+; ; atteinte. Vestige probable d'une version anterieure du programme.
+        LDY #$00
+        BEQ $0458
+        LDA #$59
+        LDX #$04
+        JMP $4257
+
+        RTS 
+
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        JSR $2D1A
+        LDA #$A0
+        JSR $0778
+        LDA #$A0
+        JSR $07D7
+        JSR $05ED
+        JSR $2C01
+        LDA #$16
+        LDY #$02
+        STA ($55),Y
+        LDA #$00
+        DEY 
+        STA ($55),Y
+        LDA #$20
+        DEY 
+        STA ($55),Y
+        LDA #$A3
+        LDX #$30
+        JSR $0719
+        JSR $2C01
+        LDA #$17
+        LDY #$02
+        STA ($55),Y
+        LDA #$00
+        DEY 
+        STA ($55),Y
+        LDA #$20
+        DEY 
+        STA ($55),Y
+        LDA #$C3
+        LDX #$30
+        JSR $0719
+        LDA #$00
+        LDY #$05
+        STA ($55),Y
+        CMP #$16
+        BCS $04D5
+        JSR $2C01
+        LDY #$08
+        LDA ($55),Y
+        LDY #$02
+        STA ($55),Y
+        LDA #$0A
+        DEY 
+        STA ($55),Y
+        LDA #$16
+        DEY 
+        STA ($55),Y
+        LDA #$41
+        LDX #$32
+        JSR $0719
+        LDY #$05
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $04A9
+
+        LDA #$00
+        STA ($55),Y
+        CMP #$1D
+        BCS $0504
+        LDA ($55),Y
+        JSR $2F7A
+        LDA #$16
+        JSR $2EBC
+        CLC 
+        ADC #$57
+        TAY 
+        TXA 
+        ADC #$32
+        TAX 
+        TYA 
+        JSR $0671
+        LDA #$41
+        LDX #$32
+        JSR $0671
+        LDY #$05
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $04D7
+
+        JSR $062F
+        JMP $050D
+
+        JSR $2B12
+        JSR $2C91
+        TAX 
+        BNE $050A
+        LDY #$05
+        STA ($55),Y
+        CMP #$08
+        BCS $052C
+        LDA #$41
+        LDX #$32
+        JSR $0671
+        LDY #$05
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0515
+
+        JSR $2B12
+        LDY #$04
+        STA ($55),Y
+        CMP #$51
+        BNE $053A
+        JMP $FD16    ;$FD16 Power-Up RESET Entry
+
+        LDA ($55),Y
+        CMP #$49
+        BNE $0577
+        JSR $05ED
+        LDA #$00
+        LDY #$05
+        STA ($55),Y
+        CMP #$20
+        BCS $0574
+        LDA ($55),Y
+        JSR $2F7A
+        LDA #$16
+        JSR $2EBC
+        CLC 
+        ADC #$D5
+        TAY 
+        TXA 
+        ADC #$34
+        TAX 
+        TYA 
+        JSR $0671
+        LDA #$41
+        LDX #$32
+        JSR $0671
+        LDY #$05
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0547
+
+        JSR $062F
+        LDA #$00
+        LDY #$05
+        STA ($55),Y
+        CMP #$08
+        BCS $0592
+        LDA #$41
+        LDX #$32
+        JSR $0671
+        LDY #$05
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $057B
+
+        JSR $05ED
+        LDA #$00
+        LDY #$05
+        STA ($55),Y
+        CMP #$07
+        BCS $05C6
+        LDA ($55),Y
+        JSR $2F7A
+        LDA #$16
+        JSR $2EBC
+        CLC 
+        ADC #$95
+        TAY 
+        TXA 
+        ADC #$37
+        TAX 
+        TYA 
+        JSR $0671
+        LDA #$41
+        LDX #$32
+        JSR $0671
+        LDY #$05
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0599
+
+        LDA #$00
+        STA ($55),Y
+        CMP #$03
+        BCS $05DF
+        LDA #$41
+        LDX #$32
+        JSR $0671
+        LDY #$05
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $05C8
+
+        JSR $062F
+        JSR $080E
+        LDA #$01
+        STA $4242
+        JMP $2C82
+
+        LDA #$00
+        JSR $2F66
+        TAY 
+        STA ($55),Y
+        CMP #$16
+        BCS $062C
+        JSR $2C01
+        LDY #$03
+        LDA ($55),Y
+        DEY 
+        STA ($55),Y
+        LDA #$00
+        DEY 
+        STA ($55),Y
+        LDA #$0A
+        DEY 
+        STA ($55),Y
+        LDY #$03
+        LDX #$00
+        LDA ($55),Y
+        JSR $2EF6
+        CLC 
+        ADC #$E3
+        TAY 
+        TXA 
+        ADC #$30
+        TAX 
+        TYA 
+        JSR $0719
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $05F3
+
+        JMP $2C56
+
+        LDA #$00
+        JSR $2F66
+        TAY 
+        STA ($55),Y
+        CMP #$0D
+        BCS $066E
+        JSR $2C01
+        LDY #$03
+        LDA ($55),Y
+        DEY 
+        STA ($55),Y
+        LDA #$00
+        DEY 
+        STA ($55),Y
+        LDA #$0A
+        DEY 
+        STA ($55),Y
+        LDY #$03
+        LDX #$00
+        LDA ($55),Y
+        JSR $2EF6
+        CLC 
+        ADC #$BF
+        TAY 
+        TXA 
+        ADC #$31
+        TAX 
+        TYA 
+        JSR $0719
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0635
+
+        JMP $2C56
+
+        JSR $2F7C
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        LDY #$01
+        STA ($55),Y
+        CMP #$14
+        BCS $06ED
+        LDA #$0A
+        DEY 
+        STA ($55),Y
+        CMP #$20
+        BCS $06E4
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $06B0
+        INX 
+        STA $57
+        STX $58
+        LDX #$00
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $06BF
+        INX 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        LDY #$00
+        STA ($57),Y
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0687
+
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $067E
+
+        JSR $2C01
+        LDA #$14
+        INY 
+        STA ($55),Y
+        LDA #$0A
+        DEY 
+        STA ($55),Y
+        LDA #$16
+        DEY 
+        STA ($55),Y
+        LDY #$06
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        JSR $0719
+        JSR $080E
+        JSR $2C91
+        TAX 
+        BNE $0716
+        JSR $21E0
+        JMP $2C78
+
+        JSR $2F7C
+        JSR $2BEB
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        LDY #$03
+        CMP ($55),Y
+        BCS $0775
+        LDY #$05
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA ($55,X)
+        CLC 
+        DEY 
+        ADC ($55),Y
+        BCC $074F
+        INX 
+        CLC 
+        ADC $5D
+        STA $57
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $58
+        LDY #$02
+        LDA ($55),Y
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        STA $5D
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        LDY #$00
+        STA ($57),Y
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0722
+
+        JMP $2C82
+
+        JSR $2F66
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        LDY #$01
+        STA ($55),Y
+        CMP #$19
+        BCS $07D4
+        LDA #$00
+        DEY 
+        STA ($55),Y
+        CMP #$20
+        BCS $07CB
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $07B7
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$02
+        LDA ($55),Y
+        LDY #$00
+        STA ($5D),Y
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $078E
+
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0785
+
+        JMP $2C73
+
+        JSR $2F66
+        LDA $423C
+        CMP #$50
+        BNE $07F6
+        LDX #$80
+        LDA #$00
+        JSR $2F7C
+        LDY #$02
+        LDA ($55),Y
+        JSR $2F7A
+        LDX #$07
+        LDA #$D0
+        JMP $0808
+
+        LDX #$80
+        LDA #$00
+        JSR $2F7C
+        LDY #$02
+        LDA ($55),Y
+        JSR $2F7A
+        LDX #$03
+        LDA #$E8
+        JSR $2E67
+        JMP $2C56
+
+        JSR $2BF4
+        LDA #$00
+        LDY #$01
+        STA ($55),Y
+        CMP #$19
+        BCS $0863
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        PHA 
+        TXA 
+        CLC 
+        ADC #$80
+        TAX 
+        PLA 
+        CLC 
+        ADC $423D
+        BCC $0834
+        INX 
+        JSR $2F7C
+        LDY #$03
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        TAY 
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        TAX 
+        TYA 
+        JSR $2F7C
+        LDX #$00
+        LDA #$20
+        JSR $2E23
+        LDY #$01
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0815
+
+        LDA $423C
+        CMP #$50
+        BEQ $086D
+        JMP $09C4
+
+        LDA $45BA
+        BNE $0875
+        JMP $09C4
+
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        LDY #$00
+        STA ($55),Y
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        TAY 
+        TXA 
+        ADC #$45
+        TAX 
+        TYA 
+        CLC 
+        ADC $4245
+        BCC $08A8
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4246
+        LDA $304F,Y
+        LDY #$00
+        STA ($5D),Y
+        LDX #$00
+        LDA $423C
+        JSR $2F0F
+        CLC 
+        ADC #$32
+        STA $5D
+        TXA 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$11
+        LDA #$66
+        STA ($5D),Y
+        DEY 
+        BPL $08CC
+        LDA #$00
+        LDY #$01
+        STA ($55),Y
+        TAX 
+        LDA ($55),Y
+        CMP #$12
+        BCC $08E1
+        JMP $098B
+
+        LDA $423C
+        JSR $2ADF
+        CLC 
+        ADC #$32
+        PHA 
+        TXA 
+        ADC #$80
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDY #$03
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        JSR $2AB7
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$66
+        LDY #$00
+        STA ($5D),Y
+        LDX #$00
+        LDA $423C
+        JSR $2ADF
+        CLC 
+        ADC #$33
+        PHA 
+        TXA 
+        ADC #$80
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDY #$03
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        JSR $2AB7
+        JSR $2F7C
+        LDY #$03
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        TAY 
+        TXA 
+        ADC #$45
+        TAX 
+        TYA 
+        JSR $2F7C
+        LDX #$00
+        LDA #$10
+        JSR $2E23
+        LDX #$00
+        LDA $423C
+        JSR $2ADF
+        CLC 
+        ADC #$43
+        PHA 
+        TXA 
+        ADC #$80
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDY #$03
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        JSR $2AB7
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$66
+        LDY #$00
+        STA ($5D),Y
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        STA ($55),Y
+        JMP $08D8
+
+        LDA $423C
+        JSR $2F7A
+        LDA #$16
+        JSR $2EBC
+        CLC 
+        ADC #$32
+        STA $5D
+        TXA 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$11
+        LDA #$66
+        STA ($5D),Y
+        DEY 
+        BPL $09A4
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        LDA ($55),Y
+        LDY $4245
+        STA ($5D),Y
+        JMP $2C65
+
+        INC $424E
+        LDA $424E
+        CMP #$02
+        BCC $09D6
+        LDA #$00
+        STA $424E
+        JMP $09D9
+
+        LDY $424E
+        LDA $3053,Y
+        STA $4247
+        LDY $424E
+        LDA $3055,Y
+        STA $4248
+        LDY $424E
+        LDA $3057,Y
+        STA $4249
+        LDY $424E
+        LDA $3059,Y
+        STA $424A
+        LDY $424E
+        LDA $305B,Y
+        STA $424B
+        LDY $424E
+        LDA $305D,Y
+        STA $424C
+        LDY $424E
+        LDA $305F,Y
+        STA $424D
+        RTS 
+
+        LDY #$0C
+        JSR $301F
+        LDA $4242
+        AND #$EF
+        STA $4242
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$12
+        BNE $0A58
+        LDA #$00
+        STA $4243
+        LDA $4241
+        CMP #$03
+        BNE $0A5D
+        LDA $4242
+        ORA #$80
+        STA $4242
+        JMP $0A5D
+
+        LDA #$63
+        STA $4243
+        LDA #$00
+        LDY #$0A
+        STA ($55),Y
+        CMP #$0D
+        BCC $0A6A
+        JMP $0D5C
+
+        LDA #$00
+        INY 
+        STA ($55),Y
+        CMP #$0C
+        BCC $0A76
+        JMP $0D29
+
+        LDA ($55),Y
+        DEY 
+        CMP ($55),Y
+        BEQ $0A80
+        JMP $0B5A
+
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $0AA3
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $424A
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        LDY #$0B
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $0ADA
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $424C
+        LDY #$00
+        STA ($5D),Y
+        LDY #$0B
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        SEC 
+        DEY 
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $424B
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        LDY #$0B
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        SEC 
+        DEY 
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $424D
+        JMP $0D1B
+
+        INY 
+        LDA ($55),Y
+        DEY 
+        CMP ($55),Y
+        BCS $0B65
+        JMP $0C44
+
+        BNE $0B6A
+        JMP $0C44
+
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $0B8D
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4247
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        LDY #$0B
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $0BC4
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4247
+        LDY #$00
+        STA ($5D),Y
+        LDY #$0B
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        SEC 
+        DEY 
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4247
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        LDY #$0B
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        SEC 
+        DEY 
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4247
+        JMP $0D1B
+
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $0C67
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4248
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        LDY #$0B
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $0C9E
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4248
+        LDY #$00
+        STA ($5D),Y
+        LDY #$0B
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        SEC 
+        DEY 
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4248
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        LDY #$0B
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        SEC 
+        DEY 
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4248
+        LDY #$00
+        STA ($5D),Y
+        LDY #$0B
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0A6D
+
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA $4247
+        STA $441A,Y
+        LDA #$18
+        SEC 
+        LDY #$0A
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC #$1A
+        STA $5D
+        TXA 
+        ADC #$44
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4247
+        LDY #$00
+        STA ($5D),Y
+        LDY #$0A
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0A61
+
+        LDA $4245
+        LDY #$08
+        STA ($55),Y
+        LDA $4244
+        INY 
+        STA ($55),Y
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$06
+        BCC $0D75
+        JMP $10E2
+
+        LDA #$A0
+        LDY #$04
+        STA ($55),Y
+        DEY 
+        STA ($55),Y
+        DEY 
+        STA ($55),Y
+        DEY 
+        STA ($55),Y
+        LDY #$09
+        LDA ($55),Y
+        BEQ $0DAB
+        LDX #$00
+        LDA ($55),Y
+        SEC 
+        SBC #$01
+        BCS $0D94
+        DEX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        LDY #$04
+        STA ($55),Y
+        LDY #$08
+        LDA ($55),Y
+        CMP #$0F
+        BCS $0DE2
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $0DD1
+        INX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        LDA ($5D),Y
+        LDY #$03
+        STA ($55),Y
+        LDY #$09
+        LDA ($55),Y
+        CMP #$11
+        BCS $0E0B
+        LDX #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $0DF4
+        INX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        LDY #$02
+        STA ($55),Y
+        LDY #$08
+        LDA ($55),Y
+        BEQ $0E3F
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        DEY 
+        LDA ($55),Y
+        SEC 
+        SBC #$01
+        BCS $0E2E
+        DEX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        LDA ($5D),Y
+        INY 
+        STA ($55),Y
+        LDA $4246
+        BNE $0E58
+        LDY #$01
+        LDA ($55),Y
+        LDY #$07
+        STA ($55),Y
+        LDY #$04
+        LDA ($55),Y
+        INY 
+        STA ($55),Y
+        LDY #$03
+        JMP $0EA1
+
+        LDA $4246
+        CMP #$01
+        BNE $0E73
+        LDY #$02
+        LDA ($55),Y
+        LDY #$07
+        STA ($55),Y
+        LDY #$01
+        LDA ($55),Y
+        LDY #$05
+        STA ($55),Y
+        DEY 
+        JMP $0EA1
+
+        LDA $4246
+        CMP #$02
+        BNE $0E8F
+        LDY #$03
+        LDA ($55),Y
+        LDY #$07
+        STA ($55),Y
+        LDY #$02
+        LDA ($55),Y
+        LDY #$05
+        STA ($55),Y
+        LDY #$01
+        JMP $0EA1
+
+        LDY #$04
+        LDA ($55),Y
+        LDY #$07
+        STA ($55),Y
+        LDY #$03
+        LDA ($55),Y
+        LDY #$05
+        STA ($55),Y
+        LDY #$02
+        LDA ($55),Y
+        LDY #$06
+        STA ($55),Y
+        LDA $423C
+        CMP #$50
+        BNE $0F26
+        LDX #$00
+        LDA #$14
+        SEC 
+        LDY #$00
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$07
+        LDA ($55),Y
+        LDY #$2A
+        STA ($5D),Y
+        LDX #$00
+        LDA #$13
+        SEC 
+        LDY #$00
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$05
+        LDA ($55),Y
+        LDY #$2B
+        STA ($5D),Y
+        LDX #$00
+        LDA #$14
+        SEC 
+        LDY #$00
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$06
+        LDA ($55),Y
+        LDY #$2C
+        STA ($5D),Y
+        LDY #$07
+        LDA ($55),Y
+        CMP #$A0
+        BEQ $0F35
+        LDY #$00
+        LDA ($55),Y
+        JSR $13FD
+        LDY #$06
+        LDA ($55),Y
+        CMP #$A0
+        BEQ $0F44
+        LDY #$00
+        LDA ($55),Y
+        JSR $149B
+        LDY #$05
+        LDA ($55),Y
+        CMP #$A0
+        BEQ $0F53
+        CMP #$18
+        BEQ $0F53
+        JMP $107A
+
+        LDY #$00
+        LDA ($55),Y
+        JSR $2F66
+        LDY #$06
+        LDA ($55),Y
+        JSR $162E
+        LDY #$05
+        LDA ($55),Y
+        CMP #$18
+        BNE $0F71
+        LDA $4242
+        ORA #$10
+        STA $4242
+        LDA $423C
+        CMP #$50
+        BEQ $0F7B
+        JMP $10E2
+
+        LDY #$00
+        LDA ($55),Y
+        CMP #$05
+        BCC $0F86
+        JMP $1071
+
+        CLC 
+        ADC #$01
+        STA ($55),Y
+        LDA #$14
+        SEC 
+        SBC ($55),Y
+        PHA 
+        TYA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$2A
+        LDA #$3F
+        STA ($5D),Y
+        LDX #$00
+        LDA #$13
+        SEC 
+        LDY #$00
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$2B
+        LDA #$3F
+        STA ($5D),Y
+        LDX #$00
+        LDA #$14
+        SEC 
+        LDY #$00
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$2C
+        LDA #$3F
+        JMP $106D
+
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        STA ($55),Y
+        LDA #$14
+        SEC 
+        SBC ($55),Y
+        PHA 
+        TYA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$2A
+        LDA #$20
+        STA ($5D),Y
+        LDX #$00
+        LDA #$13
+        SEC 
+        LDY #$00
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$2B
+        LDA #$20
+        STA ($5D),Y
+        LDX #$00
+        LDA #$14
+        SEC 
+        LDY #$00
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$2C
+        LDA #$20
+        STA ($5D),Y
+        LDY #$00
+        LDA ($55),Y
+        CMP #$05
+        BCC $0FFA
+        JMP $10E2
+
+        LDA ($55),Y
+        CMP #$12
+        BNE $108A
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        STA $4243
+        LDA $4246
+        BNE $109C
+        LDY #$09
+        LDA ($55),Y
+        BEQ $10D8
+        PHA 
+        SEC 
+        SBC #$01
+        JMP $10D5
+
+        LDA $4246
+        CMP #$01
+        BNE $10B0
+        LDY #$08
+        LDA ($55),Y
+        BEQ $10D8
+        PHA 
+        SEC 
+        SBC #$01
+        JMP $10D5
+
+        LDA $4246
+        CMP #$02
+        BNE $10C0
+        LDY #$09
+        LDA ($55),Y
+        CMP #$13
+        JMP $10CD
+
+        LDA $4246
+        CMP #$03
+        BNE $10D8
+        LDY #$08
+        LDA ($55),Y
+        CMP #$11
+        BCS $10D8
+        LDA ($55),Y
+        PHA 
+        CLC 
+        ADC #$01
+        STA ($55),Y
+        PLA 
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $0D6C
+
+        LDA $4243
+        CMP #$06
+        BCS $10EC
+        JSR $207E
+        LDY #$0C
+        JMP $2AD2
+
+        LDA #$00
+        JMP $173E
+
+        JSR $2BEB
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$13
+        BCS $1138
+        JSR $2C01
+        LDY #$03
+        LDA ($55),Y
+        CLC 
+        ADC #$04
+        DEY 
+        STA ($55),Y
+        LDA #$1A
+        DEY 
+        STA ($55),Y
+        LDA #$06
+        DEY 
+        STA ($55),Y
+        LDY #$03
+        LDX #$00
+        LDA ($55),Y
+        JSR $2F20
+        CLC 
+        ADC #$C9
+        TAY 
+        TXA 
+        ADC #$38
+        TAX 
+        TYA 
+        JSR $0719
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $10FC
+
+        JMP $2C56
+
+        JSR $2BEB
+        LDA #$1E
+        LDY #$00
+        STA ($55),Y
+        JMP $1158
+
+        JSR $2FBA
+        STA $424F
+        JSR $10F1
+        JSR $080E
+        JSR $2202
+        LDY #$00
+        LDA ($55),Y
+        PHA 
+        SEC 
+        SBC #$01
+        STA ($55),Y
+        PLA 
+        TAX 
+        BNE $1147
+        LDA #$0D
+        STA ($55),Y
+        LDA #$20
+        STA $424F
+        JMP $117B
+
+        JSR $10F1
+        JSR $080E
+        JSR $2202
+        LDY #$00
+        LDA ($55),Y
+        PHA 
+        SEC 
+        SBC #$01
+        STA ($55),Y
+        PLA 
+        TAX 
+        BNE $1170
+        LDA #$1D
+        STA ($55),Y
+        CMP #$28
+        BCS $11C2
+        LDA ($55),Y
+        CMP #$22
+        BCS $11A0
+        LDA #$21
+        SEC 
+        SBC ($55),Y
+        JSR $1898
+        JMP $11AE
+
+        LDA ($55),Y
+        JSR $1898
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        STA ($55),Y
+        LDY #$00
+        LDA ($55),Y
+        JSR $1898
+        JSR $2202
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1189
+
+        JMP $2C56
+
+        JSR $2BEB
+        JSR $2B12
+        LDY #$00
+        STA ($55),Y
+        CMP #$43
+        BNE $11D6
+        JMP $13FA
+
+        LDA ($55),Y
+        CMP #$41
+        BNE $11C8
+        LDA #$A0
+        JSR $0778
+        JSR $2C01
+        LDA #$0A
+        LDY #$02
+        STA ($55),Y
+        LDA #$0D
+        DEY 
+        STA ($55),Y
+        LDA #$06
+        DEY 
+        STA ($55),Y
+        LDA #$8D
+        LDX #$30
+        JSR $0719
+        JSR $2FBA
+        AND #$03
+        CMP #$01
+        BNE $1238
+        JSR $2C01
+        LDA #$0C
+        LDY #$02
+        STA ($55),Y
+        DEY 
+        STA ($55),Y
+        LDA #$08
+        DEY 
+        STA ($55),Y
+        LDA #$9B
+        LDX #$30
+        JSR $0719
+        JSR $080E
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$14
+        BCC $122B
+        JMP $13FA
+
+        JSR $21E0
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1222
+
+        JSR $2C01
+        LDA #$0C
+        LDY #$02
+        STA ($55),Y
+        DEY 
+        STA ($55),Y
+        LDA #$08
+        DEY 
+        STA ($55),Y
+        LDA #$93
+        LDX #$30
+        JSR $0719
+        JSR $080E
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$14
+        BCS $1269
+        JSR $21E0
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1256
+
+        JSR $2FBA
+        LDX #$00
+        AND #$03
+        CMP #$03
+        BEQ $1277
+        JMP $FD16    ;$FD16 Power-Up RESET Entry
+
+        LDA #$93
+        JSR $2C9A
+        LDA #$13
+        JSR $2C9A
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$1A
+        BCS $12A7
+        LDX #$DE
+        LDA #$A4
+        CLC 
+        ADC ($55),Y
+        BCC $1294
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA ($5D),Y
+        JSR $2B81
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1284
+
+        LDA #$0D
+        JSR $2C9A
+        LDA #$0D
+        JSR $2C9A
+        LDA #$20
+        JSR $2B81
+        LDA #$33
+        JSR $2B81
+        LDA #$31
+        JSR $2B81
+        LDA #$37
+        JSR $2B81
+        LDA #$34
+        JSR $2B81
+        LDA #$33
+        JSR $2B81
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$0B
+        BCS $12F5
+        LDX #$D4
+        LDA #$4B
+        CLC 
+        ADC ($55),Y
+        BCC $12E2
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA ($5D),Y
+        JSR $2B81
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $12D2
+
+        LDA #$0D
+        JSR $2C9A
+        LDA #$0D
+        JSR $2C9A
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$06
+        BCS $1325
+        LDX #$F0
+        LDA #$AF
+        CLC 
+        ADC ($55),Y
+        BCC $1312
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA ($5D),Y
+        JSR $2B81
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1302
+
+        LDA #$0D
+        JSR $2C9A
+        LDA #$07
+        JSR $2C9A
+        LDA #$07
+        JSR $2C9A
+        LDA #$07
+        JSR $2C9A
+        LDA #$07
+        JSR $2C9A
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$04
+        BCS $1371
+        LDA #$12
+        JSR $2C9A
+        LDA #$20
+        JSR $2C9A
+        LDA #$92
+        JSR $2C9A
+        JSR $21E0
+        JSR $21E0
+        LDA #$14
+        JSR $2C9A
+        JSR $21E0
+        JSR $21E0
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1341
+
+        LDA #$91
+        JSR $2C9A
+        LDA #$1D
+        JSR $2C9A
+        LDA #$1D
+        JSR $2C9A
+        LDA #$1D
+        JSR $2C9A
+        LDA #$1D
+        JSR $2C9A
+        LDA #$1D
+        JSR $2C9A
+        LDA #$1D
+        JSR $2C9A
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$04
+        BCS $13AF
+        LDA #$14
+        JSR $2C9A
+        JSR $21E0
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1397
+
+        LDA #$05
+        STA ($55),Y
+        CMP #$13
+        BCS $13E1
+        LDA ($55),Y
+        TAY 
+        LDA $3845,Y
+        CMP #$A0
+        BNE $13C6
+        LDA #$20
+        JMP $13D1
+
+        LDY #$00
+        LDA ($55),Y
+        TAY 
+        LDA $3845,Y
+        SEC 
+        SBC #$40
+        JSR $2B81
+        JSR $21E0
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $13B1
+
+        TYA 
+        STA ($55),Y
+        CMP #$0B
+        BCS $13FA
+        LDA #$2E
+        JSR $2B81
+        JSR $21E0
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $13E2
+
+        JMP $2C56
+
+        JSR $2F66
+        LDY #$00
+        LDA ($55),Y
+        BNE $140E
+        JSR $2F66
+        LDA #$01
+        JMP $1495
+
+        LDA ($55),Y
+        CMP #$01
+        BNE $143A
+        JSR $2F66
+        LDA #$05
+        JSR $153D
+        LDA #$02
+        JSR $2F66
+        LDA #$05
+        JSR $153D
+        LDA #$03
+        JSR $2F66
+        LDA #$05
+        JSR $153D
+        LDA #$04
+        JSR $2F66
+        LDA #$05
+        JMP $1495
+
+        LDA ($55),Y
+        CMP #$02
+        BNE $145E
+        LDA #$05
+        JSR $2F66
+        LDA #$08
+        JSR $153D
+        LDA #$06
+        JSR $2F66
+        LDA #$08
+        JSR $153D
+        LDA #$07
+        JSR $2F66
+        LDA #$08
+        JMP $1495
+
+        LDA ($55),Y
+        CMP #$03
+        BNE $1478
+        LDA #$08
+        JSR $2F66
+        LDA #$0A
+        JSR $153D
+        LDA #$09
+        JSR $2F66
+        LDA #$0A
+        JMP $1495
+
+        LDA ($55),Y
+        CMP #$04
+        BNE $1488
+        LDA #$0A
+        JSR $2F66
+        LDA #$0B
+        JMP $1495
+
+        LDA ($55),Y
+        CMP #$05
+        BNE $1498
+        LDA #$0B
+        JSR $2F66
+        LDA #$0C
+        JSR $153D
+        JMP $2C56
+
+        JSR $2F66
+        LDY #$00
+        LDA ($55),Y
+        BNE $14AE
+        LDA #$18
+        JSR $2F66
+        LDA #$01
+        JMP $1537
+
+        LDA ($55),Y
+        CMP #$01
+        BNE $14DC
+        LDA #$17
+        JSR $2F66
+        LDA #$05
+        JSR $153D
+        LDA #$16
+        JSR $2F66
+        LDA #$05
+        JSR $153D
+        LDA #$15
+        JSR $2F66
+        LDA #$05
+        JSR $153D
+        LDA #$14
+        JSR $2F66
+        LDA #$05
+        JMP $1537
+
+        LDA ($55),Y
+        CMP #$02
+        BNE $1500
+        LDA #$13
+        JSR $2F66
+        LDA #$08
+        JSR $153D
+        LDA #$12
+        JSR $2F66
+        LDA #$08
+        JSR $153D
+        LDA #$11
+        JSR $2F66
+        LDA #$08
+        JMP $1537
+
+        LDA ($55),Y
+        CMP #$03
+        BNE $151A
+        LDA #$10
+        JSR $2F66
+        LDA #$0A
+        JSR $153D
+        LDA #$0F
+        JSR $2F66
+        LDA #$0A
+        JMP $1537
+
+        LDA ($55),Y
+        CMP #$04
+        BNE $152A
+        LDA #$0E
+        JSR $2F66
+        LDA #$0B
+        JMP $1537
+
+        LDA ($55),Y
+        CMP #$05
+        BNE $153A
+        LDA #$0D
+        JSR $2F66
+        LDA #$0C
+        JSR $153D
+        JMP $2C56
+
+        JSR $2F66
+        JSR $2BEB
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        INY 
+        CMP ($55),Y
+        BCS $15B7
+        LDX #$00
+        LDA ($55,X)
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $156F
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4248
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        SBC ($55),Y
+        PHA 
+        TYA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $15A4
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4248
+        LDY #$00
+        STA ($5D),Y
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1546
+
+        LDA ($55),Y
+        DEY 
+        STA ($55),Y
+        CMP #$0D
+        BCS $162B
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $15E3
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4249
+        LDY #$00
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        SBC ($55),Y
+        PHA 
+        TYA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $1618
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4249
+        LDY #$00
+        STA ($5D),Y
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $15BA
+
+        JMP $2C73
+
+        JSR $2F66
+        LDY #$00
+        LDA ($55),Y
+        CMP #$A0
+        BNE $1689
+        INY 
+        LDA ($55),Y
+        BNE $1645
+        TYA 
+        JSR $16C8
+        JMP $16C5
+
+        LDA ($55),Y
+        CMP #$01
+        BNE $1653
+        LDA #$05
+        JSR $16C8
+        JMP $16C5
+
+        LDA ($55),Y
+        CMP #$02
+        BNE $1661
+        LDA #$08
+        JSR $16C8
+        JMP $16C5
+
+        LDA ($55),Y
+        CMP #$03
+        BNE $166F
+        LDA #$0A
+        JSR $16C8
+        JMP $16C5
+
+        LDA ($55),Y
+        CMP #$04
+        BNE $167D
+        LDA #$0B
+        JSR $16C8
+        JMP $16C5
+
+        LDA #$05
+        STA ($55),Y
+        LDA #$0C
+        JSR $16C8
+        JMP $16C5
+
+        LDA ($55),Y
+        CMP #$18
+        BNE $16C5
+        INY 
+        LDA ($55),Y
+        BNE $1699
+        LDA #$05
+        JMP $16C2
+
+        LDA ($55),Y
+        CMP #$01
+        BNE $16A4
+        LDA #$08
+        JMP $16C2
+
+        LDA ($55),Y
+        CMP #$02
+        BNE $16AF
+        LDA #$0A
+        JMP $16C2
+
+        LDA ($55),Y
+        CMP #$03
+        BNE $16BA
+        LDA #$0B
+        JMP $16C2
+
+        LDA ($55),Y
+        CMP #$04
+        BNE $16C5
+        LDA #$0C
+        JSR $173E
+        JMP $2C65
+
+        JSR $2F66
+        JSR $2BEB
+        LDY #$01
+        LDA ($55),Y
+        DEY 
+        STA ($55),Y
+        LDA ($55),Y
+        JSR $2F7A
+        LDA #$19
+        SEC 
+        LDY #$03
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2C2A
+        BPL $173B
+        LDX #$00
+        LDA ($55,X)
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$01
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $170F
+        INX 
+        JSR $2F7C
+        LDA $4249
+        JSR $2F7A
+        LDA #$19
+        SEC 
+        LDY #$05
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        SEC 
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2E67
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $16D3
+
+        JMP $2C65
+
+        JSR $2F66
+        JSR $2C01
+        LDA #$00
+        LDY #$02
+        STA ($55),Y
+        CMP #$0C
+        BCS $1780
+        LDA #$DA
+        LDX #$46
+        CLC 
+        ADC ($55),Y
+        BCC $1758
+        INX 
+        STA $57
+        STX $58
+        LDX #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $1766
+        INX 
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$46
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$DA
+        LDA ($5D),Y
+        LDY #$00
+        STA ($57),Y
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1748
+
+        LDA $424F
+        STA $46E6
+        INY 
+        LDA ($55),Y
+        DEY 
+        STA ($55),Y
+        CMP #$0D
+        BCC $1793
+        JMP $1895
+
+        LDA ($55),Y
+        TAY 
+        LDA $46DA,Y
+        LDY #$00
+        STA ($55),Y
+        LDY #$02
+        LDA ($55),Y
+        DEY 
+        STA ($55),Y
+        LDA ($55),Y
+        JSR $2F7A
+        LDA #$19
+        SEC 
+        LDY #$04
+        SBC ($55),Y
+        PHA 
+        TXA 
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2C2A
+        BMI $17BE
+        JMP $188B
+
+        LDY #$02
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $17E2
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        STA ($5D),Y
+        LDA #$18
+        SEC 
+        LDY #$02
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $1817
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        STA ($5D),Y
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $1843
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        LDA ($55),Y
+        STA ($5D),Y
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        SEC 
+        INY 
+        SBC ($55),Y
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        LDA ($55),Y
+        STA ($5D),Y
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $17A2
+
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $178A
+
+        JMP $2C78
+
+        JSR $2F66
+        JSR $2BEB
+        LDA #$00
+        TAY 
+        STA ($55),Y
+        CMP #$19
+        BCS $18D7
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$01
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $18C6
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$20
+        DEY 
+        STA ($5D),Y
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $18A1
+
+        JMP $2C65
+
+        JSR $2C0E
+        LDY #$00
+        LDA #$A0
+        STA ($55),Y
+        LDA #$0F
+        INY 
+        STA ($55),Y
+        JMP $193B
+
+        JSR $2FBA
+        AND #$1F
+        LDY #$03
+        STA ($55),Y
+        CMP #$19
+        BCS $1939
+        JSR $2FBA
+        AND #$7F
+        LDY #$02
+        JMP $1907
+
+        LDA ($55),Y
+        SEC 
+        SBC #$28
+        STA ($55),Y
+        CMP #$28
+        BCS $1902
+        LDY #$03
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $192E
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $4248
+        LDY #$00
+        STA ($5D),Y
+        LDY #$01
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        STA $59      ;TEMPF2 Temporary storage for FLPT value.
+        STX $5A
+        SEC 
+        SBC #$01
+        BCS $194B
+        DEX 
+        JSR $2FFF
+        LDA $59      ;TEMPF2 Temporary storage for FLPT value.
+        ORA $5A
+        BNE $18EB
+        LDY #$03
+        STA ($55),Y
+        CMP #$19
+        BCS $1986
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        PHA 
+        TXA 
+        CLC 
+        ADC #$80
+        TAX 
+        PLA 
+        JSR $2F7C
+        LDA $4248
+        JSR $2F7A
+        LDA #$28
+        JSR $2E67
+        LDY #$03
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1956
+
+        LDA $4248
+        JSR $0778
+        JMP $2C78
+
+        JSR $2C0E
+        LDY #$00
+        LDA #$D0
+        STA ($55),Y
+        LDA #$07
+        INY 
+        STA ($55),Y
+        JMP $1A0C
+
+        JSR $2FBA
+        AND #$1F
+        LDY #$03
+        STA ($55),Y
+        CMP #$19
+        BCS $1A0A
+        JSR $2FBA
+        AND #$1F
+        LDY #$02
+        STA ($55),Y
+        CMP #$20
+        BCS $1A0A
+        INY 
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        PHA 
+        TXA 
+        CLC 
+        ADC #$80
+        TAX 
+        PLA 
+        CLC 
+        ADC $423D
+        BCC $19D4
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $19E4
+        INX 
+        STA $57
+        STX $58
+        LDX #$00
+        INY 
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        LDY #$00
+        STA ($57),Y
+        LDY #$01
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        STA $59      ;TEMPF2 Temporary storage for FLPT value.
+        STX $5A
+        SEC 
+        SBC #$01
+        BCS $1A1C
+        DEX 
+        JSR $2FFF
+        LDA $59      ;TEMPF2 Temporary storage for FLPT value.
+        ORA $5A
+        BEQ $1A28
+        JMP $19A0
+
+        LDY #$03
+        STA ($55),Y
+        CMP #$19
+        BCS $1A78
+        LDA ($55),Y
+        JSR $2F7A
+        LDA $423C
+        JSR $2EBC
+        PHA 
+        TXA 
+        CLC 
+        ADC #$80
+        TAX 
+        PLA 
+        CLC 
+        ADC $423D
+        BCC $1A49
+        INX 
+        JSR $2F7C
+        LDY #$05
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        TAY 
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        TAX 
+        TYA 
+        JSR $2F7C
+        LDX #$00
+        LDA #$20
+        JSR $2E23
+        LDY #$03
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1A2A
+
+        JMP $2C78
+
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        JSR $2D1A
+        JSR $2F66
+        JSR $2F66
+        JSR $2FE2
+        LDA #$00
+        LDY #$07
+        STA ($55),Y
+        CMP #$12
+        BCS $1ADC
+        LDA #$00
+        DEY 
+        STA ($55),Y
+        CMP #$10
+        BCS $1AD3
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $1ABF
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$A0
+        LDY #$00
+        STA ($5D),Y
+        LDY #$06
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1A9C
+
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1A93
+
+        LDA #$00
+        STA ($55),Y
+        CMP #$10
+        BCS $1B03
+        LDA #$DA
+        LDX #$46
+        CLC 
+        ADC ($55),Y
+        BCC $1AEE
+        INX 
+        JSR $2F7C
+        JSR $2FBA
+        LDY #$00
+        JSR $2FE9
+        LDY #$07
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1ADE
+
+        LDA #<$0F11
+        STA $4244
+        LDA #>$0F11
+        STA $4245
+        LDA $423C
+        CMP #$50
+        BNE $1B17
+        JSR $080E
+        LDY #$02
+        LDA #$00
+        STA ($55),Y
+        INY 
+        STA ($55),Y
+        INY 
+        STA ($55),Y
+        INY 
+        STA ($55),Y
+        LDY #$05
+        JSR $2CDD
+        CMP #$20
+        TXA 
+        SBC #$03
+        LDA $57
+        SBC #$00
+        LDA $58
+        SBC #$00
+        BCC $1B3D
+        JMP $1BBE
+
+        LDA $423C
+        CMP #$50
+        BNE $1B65
+        LDY #$05
+        JSR $2CDD
+        JSR $2D23
+        LDX #$00
+        LDA #$50
+        JSR $2DDE
+        JSR $2D23
+        LDX #$00
+        STX $57
+        STX $58
+        TXA 
+        JSR $2D03
+        BEQ $1B65
+        JSR $080E
+        JSR $2FBA
+        AND #$03
+        LDY #$01
+        STA ($55),Y
+        LDA $4244
+        BNE $1B87
+        JSR $2FBA
+        CMP #$01
+        TXA 
+        SBC #$70
+        BVS $1B7F
+        EOR #$80
+        BPL $1B87
+        LDA #$02
+        LDY #$01
+        STA ($55),Y
+        JSR $2FBA
+        AND #$07
+        LDY #$00
+        STA ($55),Y
+        CMP #$07
+        BCS $1B87
+        INY 
+        LDA ($55),Y
+        STA $4246
+        LDA ($55),Y
+        JSR $2F66
+        LDY #$01
+        LDA ($55),Y
+        JSR $1C9D
+        LDY #$05
+        JSR $2CDD
+        JSR $2D3B
+        LDY #$01
+        JSR $2D09
+        LDY #$02
+        JSR $300C
+        JSR $2D48
+        JMP $1B26
+
+        JSR $1DDC
+        JSR $1C0D
+        LDA #<$0F11
+        STA $4244
+        LDA #>$0F11
+        STA $4245
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA #$20
+        STA ($5D),Y
+        LDA $423C
+        CMP #$50
+        BNE $1C0A
+        JSR $080E
+        LDA $423C
+        JSR $2F7A
+        LDA #$14
+        JSR $2EBC
+        STA $5D
+        TXA 
+        CLC 
+        ADC #$80
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$2B
+        LDA #$1E
+        STA ($5D),Y
+        JMP $2C8C
+
+        JSR $2BF4
+        LDA #$01
+        TAY 
+        STA ($55),Y
+        CMP #$12
+        BCC $1C1C
+        JMP $1C9A
+
+        LDA #$05
+        DEY 
+        STA ($55),Y
+        CMP #$0B
+        BCS $1C91
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        CMP #$20
+        BEQ $1C5E
+        LDY #$01
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        CMP #$2E
+        BNE $1C87
+        LDY #$01
+        LDA ($55),Y
+        STA $423F
+        DEY 
+        LDA ($55),Y
+        STA $4240
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA #$12
+        STA ($5D),Y
+        JMP $1C9A
+
+        LDY #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1C1F
+
+        INY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $1C13
+
+        JMP $2C65
+
+        JSR $2F66
+        LDY #$01
+        LDA ($55),Y
+        BEQ $1CB5
+        CMP #$01
+        BEQ $1CC3
+        CMP #$02
+        BEQ $1CD1
+        CMP #$03
+        BEQ $1CE1
+        JMP $1CEE
+
+        LDA $4244
+        BNE $1CBD
+        JMP $1DD9
+
+        DEC $4244
+        JMP $1CEE
+
+        LDA $4245
+        BNE $1CCB
+        JMP $1DD9
+
+        DEC $4245
+        JMP $1CEE
+
+        LDA $4244
+        CMP #$11
+        BNE $1CDB
+        JMP $1DD9
+
+        INC $4244
+        JMP $1CEE
+
+        LDA $4245
+        CMP #$0F
+        BNE $1CEB
+        JMP $1DD9
+
+        INC $4245
+        LDA ($55),Y
+        BEQ $1CFB
+        CMP #$02
+        BEQ $1CFB
+        LDX #$00
+        JMP $1D64
+
+        LDX #$00
+        LDA $4245
+        BEQ $1D33
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4245
+        SEC 
+        SBC #$01
+        BCS $1D1D
+        DEX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($5D),Y
+        CMP #$20
+        BNE $1D31
+        JMP $1DD9
+
+        LDX #$00
+        LDA $4245
+        CMP #$0F
+        BCS $1DAC
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4245
+        CLC 
+        ADC #$01
+        BCC $1D56
+        INX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        JMP $1DA4
+
+        LDA $4244
+        BEQ $1D87
+        SEC 
+        SBC #$01
+        BCS $1D6F
+        DEX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$20
+        BEQ $1DD9
+        LDX #$00
+        LDA $4244
+        CMP #$11
+        BCS $1DAC
+        CLC 
+        ADC #$01
+        BCC $1D94
+        INX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$20
+        BEQ $1DD9
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA #$20
+        STA ($5D),Y
+        LDY #$00
+        LDA ($55),Y
+        BEQ $1DD9
+        INY 
+        LDA ($55),Y
+        JSR $2F66
+        LDY #$01
+        LDA ($55),Y
+        SEC 
+        SBC #$01
+        JSR $1C9D
+        JMP $2C65
+
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        JSR $2F66
+        JSR $2FBA
+        AND #$07
+        CLC 
+        ADC #$04
+        LDY #$02
+        STA ($55),Y
+        JSR $2FBA
+        AND #$0F
+        LDY #$01
+        STA ($55),Y
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        CMP #$20
+        BNE $1DE7
+        LDY #$02
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $1E36
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$18
+        DEY 
+        STA ($5D),Y
+        LDY #$02
+        LDA ($55),Y
+        BEQ $1E6C
+        LDX #$00
+        LDA ($55),Y
+        SEC 
+        SBC #$01
+        BCS $1E4F
+        DEX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        CMP #$20
+        BNE $1E6C
+        LDA #$01
+        LDY #$00
+        STA ($55),Y
+        LDY #$01
+        LDA ($55),Y
+        CMP #$0F
+        BCS $1EDB
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $1E92
+        INX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($5D),Y
+        CMP #$20
+        BNE $1EDA
+        LDA ($55),Y
+        BEQ $1ED6
+        LDY #$02
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $1EC5
+        INX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$A0
+        DEY 
+        STA ($5D),Y
+        JMP $1EDA
+
+        LDA #$01
+        STA ($55),Y
+        INY 
+        LDA ($55),Y
+        BEQ $1F45
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        DEY 
+        LDA ($55),Y
+        SEC 
+        SBC #$01
+        BCS $1EFC
+        DEX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($5D),Y
+        CMP #$20
+        BNE $1F45
+        LDA ($55),Y
+        BEQ $1F41
+        LDY #$02
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        DEY 
+        LDA ($55),Y
+        SEC 
+        SBC #$01
+        BCS $1F2F
+        DEX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$A0
+        DEY 
+        STA ($5D),Y
+        JMP $1F45
+
+        LDA #$01
+        STA ($55),Y
+        LDY #$02
+        LDA ($55),Y
+        CMP #$11
+        BCS $1FA1
+        LDX #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $1F57
+        INX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        CMP #$20
+        BNE $1FA1
+        LDY #$00
+        LDA ($55),Y
+        BEQ $1FA1
+        LDY #$02
+        LDX #$00
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        BCC $1F80
+        INX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $1F98
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$A0
+        DEY 
+        STA ($5D),Y
+        JMP $2C73
+
+        LDA #$A0
+        STA $4A0A
+        STA $4A0B
+        STA $4A0C
+        LDA #$B0
+        STA $4A0D
+        RTS 
+
+        JSR $2C01
+        LDA #$0A
+        LDY #$02
+        STA ($55),Y
+        LDA #$1B
+        DEY 
+        STA ($55),Y
+        LDA #$04
+        DEY 
+        STA ($55),Y
+        LDA #$0A
+        LDX #$4A
+        JMP $0719
+
+        JSR $2C01
+        LDA #$0D
+        LDY #$02
+        STA ($55),Y
+        LDA #$00
+        DEY 
+        STA ($55),Y
+        LDA #$04
+        DEY 
+        STA ($55),Y
+        LDA #$0A
+        LDX #$4A
+        JMP $0719
+
+        LDA $4A0D
+        CMP #$B0
+        BEQ $1FF4
+        CMP #$A0
+        BNE $1FFA
+        LDA #$B5
+        STA $4A0D
+        RTS 
+
+        LDA #$B0
+        STA $4A0D
+        JMP $2008
+
+        JSR $202C
+        JMP $202C
+
+        LDA $4A0C
+        CMP #$B0
+        BEQ $2013
+        CMP #$A0
+        BNE $2019
+        LDA #$B1
+        STA $4A0C
+        RTS 
+
+        INC $4A0C
+        LDA $4A0C
+        CMP #$BA
+        BCC $202B
+        LDA #$B0
+        STA $4A0C
+        JMP $202C
+
+        RTS 
+
+        LDA $4A0B
+        CMP #$B0
+        BEQ $2037
+        CMP #$A0
+        BNE $203F
+        LDA #$B1
+        STA $4A0B
+        JMP $2051
+
+        INC $4A0B
+        LDA $4A0B
+        CMP #$BA
+        BCC $2051
+        LDA #$B0
+        STA $4A0B
+        JSR $205E
+        LDA $4A0C
+        CMP #$A0
+        BNE $205D
+        LDA #$B0
+        STA $4A0C
+        RTS 
+
+        LDA $4A0A
+        CMP #$B0
+        BEQ $2069
+        CMP #$A0
+        BNE $206E
+        LDA #$B1
+        JMP $207A
+
+        INC $4A0A
+        LDA $4A0A
+        CMP #$BA
+        BCC $207D
+        LDA #$B0
+        STA $4A0A
+        RTS 
+
+        LDA $4241
+        CMP #$02
+        BCS $20C8
+        LDA $4243
+        BEQ $20C1
+        CMP #$01
+        BEQ $20BA
+        CMP #$02
+        BEQ $20B3
+        CMP #$03
+        BEQ $20AC
+        CMP #$04
+        BEQ $20A5
+        CMP #$05
+        BNE $210B
+        LDA #$3B
+        LDX #$39
+        JMP $2108
+
+        LDA #$4E
+        LDX #$39
+        JMP $2108
+
+        LDA #$79
+        LDX #$39
+        JMP $2108
+
+        LDA #$D8
+        LDX #$39
+        JMP $2108
+
+        LDA #$B4
+        LDX #$3A
+        JMP $2108
+
+        LDA #$B2
+        LDX #$3C
+        JMP $2108
+
+        LDA $4243
+        BEQ $2104
+        CMP #$01
+        BEQ $20FD
+        CMP #$02
+        BEQ $20F6
+        CMP #$03
+        BEQ $20EF
+        CMP #$04
+        BEQ $20E8
+        CMP #$05
+        BNE $210B
+        LDA #$43
+        LDX #$39
+        JMP $2108
+
+        LDA #$60
+        LDX #$39
+        JMP $2108
+
+        LDA #$9D
+        LDX #$39
+        JMP $2108
+
+        LDA #$34
+        LDX #$3A
+        JMP $2108
+
+        LDA #$81
+        LDX #$3B
+        JMP $2108
+
+        LDA #$57
+        LDX #$3F
+        JMP $210C
+
+        RTS 
+
+        JSR $2F7C
+        JSR $2F92
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        JSR $2F66
+        LDY #$04
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        STA $59      ;TEMPF2 Temporary storage for FLPT value.
+        STX $5A
+        CLC 
+        ADC #$01
+        BCC $212F
+        INX 
+        JSR $3001
+        LDY #$00
+        LDA ($59),Y  ;TEMPF2 Temporary storage for FLPT value.
+        LDY #$02
+        STA ($55),Y
+        LDY #$04
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        STA $59      ;TEMPF2 Temporary storage for FLPT value.
+        STX $5A
+        CLC 
+        ADC #$01
+        BCC $214C
+        INX 
+        JSR $3001
+        LDY #$00
+        LDA ($59),Y  ;TEMPF2 Temporary storage for FLPT value.
+        STA ($55),Y
+        LDA ($55),Y
+        BNE $215C
+        JMP $21DD
+
+        LDY #$04
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        STA $59      ;TEMPF2 Temporary storage for FLPT value.
+        STX $5A
+        CLC 
+        ADC #$01
+        BCC $216E
+        INX 
+        JSR $3001
+        LDY #$00
+        LDA ($59),Y  ;TEMPF2 Temporary storage for FLPT value.
+        INY 
+        JMP $21CB
+
+        LDY #$02
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        CLC 
+        ADC #$9A
+        STA $5D
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ADC #$42
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $219D
+        INX 
+        JSR $2F7C
+        LDY #$06
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        STA $59      ;TEMPF2 Temporary storage for FLPT value.
+        STX $5A
+        CLC 
+        ADC #$01
+        BCC $21B2
+        INX 
+        JSR $3001
+        LDY #$00
+        LDA ($59),Y  ;TEMPF2 Temporary storage for FLPT value.
+        JSR $2FE9
+        LDY #$01
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        STA ($55),Y
+        DEY 
+        LDA ($55),Y
+        SEC 
+        SBC #$01
+        STA ($55),Y
+        LDY #$00
+        LDA ($55),Y
+        BNE $2179
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $2138
+
+        JMP $2C87
+
+; --- Boucle d'animation avec verification clavier (variante X=3) ---
+; ; Dessine un element (mur/segment) via $2D1D/$2CDB/$2D3B/$2CEE/$300A/$2D48/
+; ; $2D55, boucle tant que $2D55 ne detecte pas le motif de fin (BNE $21E9),
+; ; puis JMP $2C78 (petite routine utilitaire de comparaison, cf plus bas).
+        LDX #$03
+        LDA #$00
+        LDA #$E8
+        JSR $2D1D
+        JSR $2CDB
+        JSR $2D3B
+        LDY #$01
+        JSR $2CEE
+        JSR $300A
+        JSR $2D48
+        JSR $2D55
+        BNE $21E9
+        JMP $2C78
+
+; --- Boucle d'animation avec verification clavier (variante X=1) ---
+; ; Identique au bloc precedent ($21E0) avec un parametre initial different.
+        LDX #$01
+        LDA #$00
+        LDA #$F4
+        JSR $2D1D
+        JSR $2CDB
+        JSR $2D3B
+        LDY #$01
+        JSR $2CEE
+        JSR $300A
+        JSR $2D48
+        JSR $2D55
+        BNE $220B
+        JMP $2C78
+
+        JMP $222A
+
+        JSR $2B12
+        JSR $2C91
+        TAX 
+        BNE $2227
+        LDA $D5      ;right side of window
+        CMP #$4F
+        BNE $223B
+        LDA #$50
+        STA $423C
+        LDA #$20
+        JSR $07D7
+        JSR $09D9
+        LDA #$20
+        JSR $0778
+        LDA #$8E
+        JMP $2C9A
+
+        JSR $2D1A
+        JSR $2C01
+        LDA #$0A
+        LDY #$02
+        STA ($55),Y
+        LDA #$09
+        DEY 
+        STA ($55),Y
+        LDA #$0D
+        DEY 
+        STA ($55),Y
+        LDA #$61
+        LDX #$30
+        JSR $0719
+        JSR $080E
+        JSR $2C91
+        TAX 
+        BNE $22B3
+        JSR $2CDB
+        JSR $2D3B
+        LDY #$01
+        JSR $2D09
+        JSR $300A
+        JSR $2D48
+        JSR $2CDB
+        JSR $2D23
+        LDX #$27
+        LDA #$00
+        STA $57
+        STA $58
+        LDA #$10
+        JSR $2D03
+        BEQ $226D
+        JSR $2C01
+        LDA #$0C
+        LDY #$02
+        STA ($55),Y
+        LDA #$03
+        DEY 
+        STA ($55),Y
+        LDA #$1A
+        DEY 
+        STA ($55),Y
+        LDA #$6E
+        LDX #$30
+        JMP $2267
+
+        JMP $2C78
+
+        LDA $4248
+        JSR $0778
+        JSR $2C01
+        LDA #$09
+        LDY #$02
+        STA ($55),Y
+        LDA #$1B
+        DEY 
+        STA ($55),Y
+        LDA #$05
+        DEY 
+        STA ($55),Y
+        LDA #$88
+        LDX #$30
+        JSR $0719
+        JSR $1FA4
+        JSR $1FB5
+        LDA #$00
+        STA $4242
+        STA $4250
+        STA $4251
+        LDA #$01
+        STA $4246
+        LDA #<$0F11
+        STA $4244
+        LDA #>$0F11
+        STA $4245
+        JSR $0A19
+        JMP $22FF
+
+        JSR $2B12
+        JSR $2C91
+        TAX 
+        BNE $22FC
+        JSR $198F
+        JSR $2377
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$18
+        BNE $232F
+        JSR $113B
+        JSR $18DA
+        JMP $1A7B
+
+        LDA $4242
+        AND #$80
+        BEQ $2371
+        JSR $11C5
+        JSR $18DA
+        LDA #<$0F11
+        STA $4244
+        LDA #>$0F11
+        STA $4245
+        LDA $4240
+        CMP #$0C
+        BCC $2370
+        LDA $423F
+        CMP #$0E
+        BCC $2370
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA #$2E
+        STA ($5D),Y
+        JMP $1C0D
+
+        RTS 
+
+        JSR $2202
+        JMP $2308
+
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        JSR $2FBA
+        STA $424F
+        JSR $2C91
+        TAX 
+        BNE $238E
+        JMP $24FC
+
+        JSR $2B12
+        LDY #$01
+        STA ($55),Y
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$12
+        BNE $23B3
+        JMP $24FC
+
+        LDY #$01
+        LDA ($55),Y
+        CMP #$34
+        BEQ $23CD
+        CMP #$36
+        BEQ $23E2
+        CMP #$38
+        BEQ $23F5
+        CMP #$5A
+        BNE $23CA
+        JMP $24F9
+
+        JMP $24FC
+
+        LDA $4246
+        CMP #$03
+        BNE $23DC
+        LDA #$00
+        STA $4246
+        JMP $24FC
+
+        INC $4246
+        JMP $24FC
+
+        LDA $4246
+        BNE $23EF
+        LDA #$03
+        STA $4246
+        JMP $24FC
+
+        DEC $4246
+        JMP $24FC
+
+        LDA $4246
+        BNE $242C
+        LDA $4244
+        BNE $2402
+        JMP $24EE
+
+        LDX #$00
+        LDA $4244
+        SEC 
+        SBC #$01
+        BCS $240D
+        DEX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$A0
+        BNE $2426
+        JMP $24EE
+
+        DEC $4244
+        JMP $24EE
+
+        LDA $4246
+        CMP #$01
+        BNE $2472
+        LDA $4245
+        BNE $243B
+        JMP $24EE
+
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4245
+        SEC 
+        SBC #$01
+        BCS $2458
+        DEX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($5D),Y
+        CMP #$A0
+        BNE $246C
+        JMP $24EE
+
+        DEC $4245
+        JMP $24EA
+
+        LDA $4246
+        CMP #$02
+        BNE $24AB
+        LDA $4244
+        CMP #$11
+        BCS $24EE
+        LDX #$00
+        LDA $4244
+        CLC 
+        ADC #$01
+        BCC $248B
+        INX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$A0
+        BEQ $24EE
+        INC $4244
+        LDA #$01
+        LDY #$00
+        JMP $24EC
+
+        LDA $4246
+        CMP #$03
+        BNE $24EE
+        LDA $4245
+        CMP #$0F
+        BCS $24EE
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4245
+        CLC 
+        ADC #$01
+        BCC $24D7
+        INX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($5D),Y
+        CMP #$A0
+        BEQ $24EE
+        INC $4245
+        LDA #$01
+        STA ($55),Y
+        LDA $4242
+        ORA #$40
+        STA $4242
+        JMP $24FC
+
+        JSR $09C7
+        INC $4241
+        LDX #$00
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDX #$00
+        LDA ($5D),Y
+        CMP #$18
+        BNE $2542
+        JSR $10F6
+        JSR $2002
+        JSR $1FB5
+        JSR $2C01
+        LDA #$18
+        LDY #$02
+        STA ($55),Y
+        LDA #$01
+        DEY 
+        STA ($55),Y
+        LDA #$16
+        DEY 
+        STA ($55),Y
+        LDA #$2F
+        LDX #$38
+        JSR $0719
+        JMP $25AC
+
+        LDA $4244
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4245
+        LDA ($5D),Y
+        CMP #$12
+        BNE $256D
+        LDA $4241
+        CMP #$02
+        BCC $256D
+        LDA $4242
+        ORA #$80
+        STA $4242
+        JMP $258C
+
+        LDA $4242
+        AND #$40
+        BEQ $2577
+        INC $4241
+        LDA $4241
+        CMP #$04
+        BCC $258C
+        LDA #$00
+        STA $4241
+        JSR $25AF
+        LDA #$01
+        LDY #$00
+        STA ($55),Y
+        LDA $4242
+        AND #$48
+        CMP #$48
+        BNE $259B
+        JSR $1FE9
+        JSR $1FB5
+        LDA $4242
+        AND #$BF
+        STA $4242
+        JSR $0A19
+        JSR $280A
+        JSR $080E
+        JMP $2C65
+
+        LDA $423F
+        JSR $2F66
+        LDA $4240
+        JSR $2F66
+        LDA $423F
+        SEC 
+        SBC $4244
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F36
+        JSR $2F66
+        LDA $4240
+        SEC 
+        SBC $4245
+        PHA 
+        LDA #$00
+        SBC #$00
+        TAX 
+        PLA 
+        JSR $2F36
+        JSR $2F66
+        LDY #$01
+        LDA ($55),Y
+        DEY 
+        CMP ($55),Y
+        BCC $25FE
+        JSR $2762
+        LDY #$03
+        LDA ($55),Y
+        CMP $423F
+        BNE $260D
+        JSR $2686
+        JMP $260D
+
+        JSR $2686
+        LDY #$02
+        LDA ($55),Y
+        CMP $4240
+        BNE $260D
+        JSR $2762
+        LDY #$01
+        LDA ($55),Y
+        CLC 
+        DEY 
+        ADC ($55),Y
+        STA $4252
+        LDY #$03
+        LDA ($55),Y
+        CMP $423F
+        BNE $262A
+        DEY 
+        LDA ($55),Y
+        CMP $4240
+        BEQ $2676
+        INY 
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        CLC 
+        ADC $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BCC $2646
+        INX 
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$2E
+        LDY #$00
+        STA ($5D),Y
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA #$12
+        STA ($5D),Y
+        LDA $4242
+        ORA #$08
+        STA $4242
+        AND #$FB
+        JMP $2680
+
+        LDA $4242
+        ORA #$04
+        STA $4242
+        AND #$F7
+        STA $4242
+        JMP $2C78
+
+        LDA $4240
+        CMP $4245
+        BCC $26F5
+        BEQ $26F5
+        LDA $4240
+        BEQ $26F4
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4240
+        SEC 
+        SBC #$01
+        BCS $26B2
+        DEX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        LDA ($5D),Y
+        CMP #$A0
+        BEQ $26F4
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4240
+        SEC 
+        SBC #$01
+        BCS $26E1
+        DEX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA ($5D),Y
+        CMP #$18
+        BEQ $26F4
+        DEC $4240
+        RTS 
+
+        LDA $4240
+        CMP $4245
+        BCS $2761
+        CMP #$0F
+        BCS $275D
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4240
+        CLC 
+        ADC #$01
+        BCC $271F
+        INX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$00
+        LDA ($5D),Y
+        CMP #$A0
+        BEQ $275D
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDX #$00
+        LDA $4240
+        CLC 
+        ADC #$01
+        BCC $274E
+        INX 
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA ($5D),Y
+        CMP #$18
+        BNE $275E
+        RTS 
+
+        INC $4240
+        RTS 
+
+        LDA $423F
+        CMP $4244
+        BCC $27B7
+        BEQ $27B7
+        LDA $423F
+        BEQ $27B6
+        LDX #$00
+        LDA $423F
+        SEC 
+        SBC #$01
+        BCS $277C
+        DEX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA ($5D),Y
+        CMP #$A0
+        BEQ $27B6
+        LDX #$00
+        LDA $423F
+        SEC 
+        SBC #$01
+        BCS $279D
+        DEX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA ($5D),Y
+        CMP #$18
+        BEQ $27B6
+        DEC $423F
+        RTS 
+
+        LDA $423F
+        CMP $4244
+        BCS $2809
+        CMP #$11
+        BCS $2805
+        LDX #$00
+        LDA $423F
+        CLC 
+        ADC #$01
+        BCC $27CE
+        INX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA ($5D),Y
+        CMP #$A0
+        BEQ $2805
+        LDX #$00
+        LDA $423F
+        CLC 
+        ADC #$01
+        BCC $27EF
+        INX 
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA ($5D),Y
+        CMP #$18
+        BNE $2806
+        RTS 
+
+        INC $423F
+        RTS 
+
+        LDA #$2F
+        LDX #$38
+        JSR $2F7C
+        LDA #$00
+        JSR $2F66
+        JSR $2F66
+        JSR $2F66
+        LDA $4242
+        AND #$80
+        BEQ $2829
+        JSR $1FCF
+        JMP $2A86
+
+        LDA $4243
+        BNE $2831
+        JMP $2A86
+
+        LDA $4242
+        AND #$08
+        BNE $283B
+        JMP $29F2
+
+        LDA $4252
+        CMP #$07
+        BEQ $2846
+        CMP #$08
+        BNE $2852
+        LDA #$9D
+        LDX #$38
+        LDY #$03
+        JSR $3001
+        JMP $29BC
+
+        LDA $4252
+        CMP #$09
+        BCC $2872
+        LDA #$B3
+        LDX #$38
+        LDY #$03
+        JSR $3001
+        LDA $4251
+        CMP #$10
+        BCC $286C
+        JMP $29BC
+
+        INC $4251
+        JMP $29BC
+
+        LDA $423F
+        CMP $4244
+        BEQ $287D
+        JMP $2919
+
+        LDA #$01
+        TAY 
+        STA ($55),Y
+        LDA $4240
+        CMP $4245
+        BCC $28D5
+        BEQ $28D5
+        LDA $4245
+        CLC 
+        ADC #$01
+        INY 
+        STA ($55),Y
+        CMP $4240
+        BCS $28C8
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        CMP #$A0
+        BNE $28BE
+        LDA #$00
+        LDY #$01
+        STA ($55),Y
+        JMP $28C8
+
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $2893
+
+        LDA $4246
+        CMP #$01
+        BEQ $28D2
+        JMP $29BC
+
+        JMP $29B8
+
+        LDA $4240
+        CLC 
+        ADC #$01
+        INY 
+        STA ($55),Y
+        CMP $4245
+        BCS $2911
+        LDX #$00
+        LDA $423F
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA ($55),Y
+        TAY 
+        LDA ($5D),Y
+        CMP #$A0
+        BNE $2907
+        LDA #$00
+        LDY #$01
+        STA ($55),Y
+        JMP $2911
+
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $28DC
+
+        LDA $4246
+        CMP #$03
+        JMP $29B4
+
+        LDA $4240
+        CMP $4245
+        BEQ $2924
+        JMP $29BC
+
+        LDA #$01
+        TAY 
+        STA ($55),Y
+        LDA $423F
+        CMP $4244
+        BCC $2974
+        BEQ $2974
+        LDA $4244
+        CLC 
+        ADC #$01
+        INY 
+        STA ($55),Y
+        CMP $423F
+        BCS $296E
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA ($5D),Y
+        CMP #$A0
+        BNE $2964
+        LDA #$00
+        LDY #$01
+        STA ($55),Y
+        JMP $296E
+
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $293A
+
+        LDA $4246
+        JMP $29B4
+
+        LDA $423F
+        CLC 
+        ADC #$01
+        INY 
+        STA ($55),Y
+        CMP $4244
+        BCS $29AF
+        LDX #$00
+        LDA ($55),Y
+        JSR $2AEA
+        CLC 
+        ADC #$BA
+        STA $5D
+        TXA 
+        ADC #$45
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY $4240
+        LDA ($5D),Y
+        CMP #$A0
+        BNE $29A5
+        LDA #$00
+        LDY #$01
+        STA ($55),Y
+        JMP $29AF
+
+        LDY #$02
+        LDA ($55),Y
+        CLC 
+        ADC #$01
+        JMP $297B
+
+        LDA $4246
+        CMP #$02
+        BNE $29BC
+        LDA #$01
+        LDY #$00
+        STA ($55),Y
+        LDY #$01
+        LDA ($55),Y
+        BEQ $2A0C
+        LDA $4252
+        CMP #$03
+        BCC $29D5
+        LDA #$87
+        LDX #$38
+        LDY #$03
+        JSR $3001
+        JMP $2A0C
+
+        DEY 
+        LDA ($55),Y
+        BEQ $29E6
+        LDA #$5B
+        LDX #$38
+        LDY #$03
+        JSR $3001
+        JMP $2A0C
+
+        LDA #$71
+        LDX #$38
+        LDY #$03
+        JSR $3001
+        JMP $2A0C
+
+        LDA $4242
+        AND #$04
+        BEQ $2A0C
+        LDA #$45
+        LDX #$38
+        LDY #$03
+        JSR $3001
+        LDA $4250
+        CMP #$10
+        BCS $2A0C
+        INC $4250
+        LDA $4243
+        CMP #$05
+        BCS $2A1C
+        LDA #$2F
+        LDX #$38
+        LDY #$03
+        JSR $3001
+        LDY #$04
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        CPX #$38
+        BNE $2A3D
+        CMP #$45
+        BNE $2A3D
+        LDA $4250
+        CMP #$10
+        BCC $2A42
+        LDA #$2F
+        LDX #$38
+        JSR $3001
+        JMP $2A42
+
+        LDA #$00
+        STA $4250
+        LDY #$04
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        CPX #$38
+        BNE $2A63
+        CMP #$B3
+        BNE $2A63
+        LDA $4251
+        CMP #$10
+        BCC $2A68
+        LDA #$2F
+        LDX #$38
+        JSR $3001
+        JMP $2A68
+
+        LDA #$00
+        STA $4251
+        JSR $2C01
+        LDA #$18
+        LDY #$02
+        STA ($55),Y
+        LDA #$01
+        DEY 
+        STA ($55),Y
+        LDA #$16
+        DEY 
+        STA ($55),Y
+        LDY #$07
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        JSR $0719
+        JMP $2C7D
+
+        JSR $2BEB
+        JSR $2224
+        JSR $224D
+        JSR $2B12
+        LDY #$00
+        STA ($55),Y
+        CMP #$4E
+        BEQ $2AA9
+        JSR $0459
+        JSR $1A7B
+        JSR $18DA
+        JMP $2AAF
+
+        JSR $18DA
+        JSR $1A7B
+        JSR $22B6
+        JMP $2AAF
+
+        LDX #$00
+        CLC 
+        LDY #$00
+        ADC ($55),Y
+        INY 
+        STA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        TXA 
+        ADC ($55),Y
+        TAX 
+        CLC 
+        LDA $55
+        ADC #$02
+        STA $55
+        BCC $2ACE
+        INC $56
+        LDA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        RTS 
+
+        INY 
+        PHA 
+        CLC 
+        TYA 
+        ADC $55
+        STA $55
+        BCC $2ADD
+        INC $56
+        PLA 
+        RTS 
+
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        LDX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        RTS 
+
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ASL 
+        ROL $65      ;BITS   Floating -accum. #1: Overflow Digit
+        LDX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        RTS 
+
+; --- Routine d'initialisation appelee au demarrage ---
+        LDA $4253
+        LDX $4254
+        JSR $2F7C
+        LDA $4255
+        LDX $4256
+        JSR $2F7C
+        LDY #$04
+        JMP $2A89
+
+; --- Lecture BLOQUANTE d'une touche clavier ---
+; ; Manipule DIRECTEMENT les variables internes du clavier gerees par l'IRQ
+; ; du KERNAL : $9E = NDX (nombre de touches en attente) et $026F = debut du
+; ; tampon clavier (FIFO). Attend activement (boucle sur $9E=0), decale le
+; ; tampon d'une position pour consommer la touche, gere aussi le clignotement
+; ; du curseur ($A7/$AA) via $2B45 pendant l'attente. SEI/CLI encadrent la
+; ; manipulation du tampon pour eviter une collision avec l'IRQ clavier.
+        LDA $9E      ;NDX    No. of Chars. in Keyboard Buffer (Queue)
+        BNE $2B2D
+        LDA $A7      ;BLNSW  Cursor Blink enable: 0 = Flash Cursor
+        PHA 
+        LDA $4A0E
+        JSR $2B45
+        LDA $9E      ;NDX    No. of Chars. in Keyboard Buffer (Queue)
+        BEQ $2B1F
+        LDX #$00
+        PLA 
+        BNE $2B29
+        INX 
+        TXA 
+        JSR $2B45
+        SEI 
+        LDY $026F    ;KEYD   Keyboard Buffer Queue (FIFO)
+        LDX #$00
+        LDA $0270,X
+        STA $026F,X  ;KEYD   Keyboard Buffer Queue (FIFO)
+        INX 
+        CPX $9E      ;NDX    No. of Chars. in Keyboard Buffer (Queue)
+        BNE $2B33
+        DEC $9E      ;NDX    No. of Chars. in Keyboard Buffer (Queue)
+        CLI 
+        LDX #$00
+        TYA 
+        RTS 
+
+; --- Bascule le clignotement du curseur (inverse video) ---
+; ; Utilise $A7 (etat courant du clignotement) et $AA (drapeau de bascule),
+; ; et ecrit directement dans l'ecran via ($C4),Y ou $C4/$C5 = pointeur de
+; ; ligne d'ecran courante (PNT) et $C6 = colonne du curseur (PNTR).
+        TAX 
+        BNE $2B61
+        LDA $A7      ;BLNSW  Cursor Blink enable: 0 = Flash Cursor
+        BNE $2B60
+        LDA #$01
+        STA $A7      ;BLNSW  Cursor Blink enable: 0 = Flash Cursor
+        LDA $AA      ;BLNON  Flag: Last Cursor Blink On/Off
+        BEQ $2B5C
+        LDY $C6      ;PNTR   Cursor Column on Current Line
+        LDA ($C4),Y  ;PNT    Pointer: Current Screen Line Address
+        EOR #$80
+        STA ($C4),Y  ;PNT    Pointer: Current Screen Line Address
+        LDA #$00
+        STA $AA      ;BLNON  Flag: Last Cursor Blink On/Off
+        RTS 
+
+        LDA #$00
+        STA $A7      ;BLNSW  Cursor Blink enable: 0 = Flash Cursor
+        RTS 
+
+        LDA $96      ;STATUS Kernal I/O Status Word: ST
+        BEQ $2B6E
+        LDA #$05
+        SEC 
+        RTS 
+
+        CLC 
+        RTS 
+
+; --- Routine d'initialisation appelee au demarrage (suite) ---
+        LDY #$00
+        BEQ $2B7B
+        LDA #$3C
+        LDX #$42
+        JMP $4257
+
+        RTS 
+
+        PHA 
+        JSR $2C1B
+        PLA 
+        CMP #$0A
+        BNE $2B8B
+        LDA #$00
+        STA $C6      ;PNTR   Cursor Column on Current Line
+        BEQ $2BCC
+        CMP #$0D
+        BEQ $2BB0
+        CMP #$20
+        BCC $2BA0
+        TAY 
+        BMI $2BBE
+        CMP #$60
+        BCC $2B9E
+        AND #$DF
+        BNE $2BA0
+        AND #$3F
+        JSR $2BE4
+        CPY $D5      ;right side of window
+        BNE $2BAC
+        JSR $2BB0
+        LDY #$FF
+        INY 
+        STY $C6      ;PNTR   Cursor Column on Current Line
+        RTS 
+
+        LDA $D5      ;right side of window
+        SEC 
+        ADC $C4      ;PNT    Pointer: Current Screen Line Address
+        STA $C4      ;PNT    Pointer: Current Screen Line Address
+        BCC $2BBB
+        INC $C5
+        INC $D8      ;TBLX   Current Cursor Physical Line Number
+        RTS 
+
+        AND #$7F
+        CMP #$7E
+        BNE $2BC8
+        LDA #$5E
+        BNE $2BA0
+        ORA #$40
+        BNE $2BA0
+        LDY $D8      ;TBLX   Current Cursor Physical Line Number
+; --- Calcule le pointeur de la ligne d'ecran courante ---
+; ; A partir d'un numero de ligne (0-24), lit la table de decalages
+; ; $420A (poids faible) / $4223 (poids fort) -- increments de 40, une entree
+; ; par ligne d'ecran -- pour reconstituer l'adresse absolue de la ligne.
+        LDA $420A,Y
+        STA $C4      ;PNT    Pointer: Current Screen Line Address
+        LDA $4223,Y
+        LDY $D5      ;right side of window
+        CPY #$29
+        BCC $2BDF
+        ASL $C4      ;PNT    Pointer: Current Screen Line Address
+        ROL 
+        ORA #$80
+        STA $C5
+        RTS 
+
+        ORA $9F      ;RVS    Flag: Print Reverse Chars. -1=Yes, 0=No Used
+        LDY $C6      ;PNTR   Cursor Column on Current Line
+        STA ($C4),Y  ;PNT    Pointer: Current Screen Line Address
+        RTS 
+
+        LDY $55
+        BNE $2BF1
+        DEC $56
+        DEC $55
+        RTS 
+
+        LDA $55
+        SEC 
+        SBC #$02
+        STA $55
+        BCC $2BFE
+        RTS 
+
+        DEC $56
+        RTS 
+
+; --- Avance le pointeur bytecode ($55/$56) de 3 octets ---
+        LDA $55
+        SEC 
+        SBC #$03
+        STA $55
+        BCC $2C0B
+        RTS 
+
+        DEC $56
+        RTS 
+
+; --- Avance le pointeur bytecode ($55/$56) de 4 octets ---
+        LDA $55
+        SEC 
+        SBC #$04
+        STA $55
+        BCC $2C18
+        RTS 
+
+        DEC $56
+        RTS 
+
+        JSR $2F48
+        STA $D8      ;TBLX   Current Cursor Physical Line Number
+        JSR $2F48
+        STA $C6      ;PNTR   Cursor Column on Current Line
+        JMP $2BCC
+
+        LDX #$00
+        STA $57
+        STX $58
+        LDY #$00
+        LDA ($55),Y
+        TAX 
+        INC $55
+        BNE $2C39
+        INC $56
+        LDA ($55),Y
+        INC $55
+        BNE $2C41
+        INC $56
+        SEC 
+        SBC $58
+        BNE $2C4F
+        CPX $57
+        BEQ $2C4E
+        ADC #$FF
+        ORA #$01
+        RTS 
+
+        BVC $2C4E
+        EOR #$FF
+        ORA #$01
+        RTS 
+
+; --- Avance le pointeur bytecode ($55/$56) de 1 octet ---
+        INC $55
+        BNE $2C5C
+        INC $56
+        RTS 
+
+        LDY #$01
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        INC $55
+        BEQ $2C6E
+        INC $55
+        BEQ $2C70
+        RTS 
+
+        INC $55
+        INC $56
+        RTS 
+
+        LDY #$03
+        JMP $2AD2
+
+; --- Petite routine utilitaire de test/comparaison ---
+; ; Retourne un flag (zero/carry) consomme par l'appelant, utilisee comme
+; ; primitive de comparaison generique pour le flux d'instructions du jeu.
+        LDY #$04
+        JMP $2AD2
+
+        LDY #$05
+        JMP $2AD2
+
+        LDY #$06
+        JMP $2AD2
+
+; --- Table de sauts internes (LDY puis JMP $2AD2) ---
+        LDY #$07
+        JMP $2AD2
+
+        LDY #$08
+        JMP $2AD2
+
+; --- Test NON BLOQUANT de presence d'une touche au clavier ---
+; ; Lit $9E (NDX, nombre de touches en attente) : retourne 0 si aucune touche,
+; ; 1 sinon. Contrairement a $2B12, ne consomme pas la touche et n'attend pas.
+        LDX #$00
+        LDA $9E      ;NDX    No. of Chars. in Keyboard Buffer (Queue)
+        BEQ $2C99
+        LDA #$01
+        RTS 
+
+; --- Enveloppe autour de CHROUT (KERNAL $FFD2) ---
+; ; Affiche le caractere contenu dans A a l'ecran via le KERNAL, puis enchaine
+; ; sur $2B66 (test d'etat, ex. touche STOP).
+        JSR $FFD2    ;$FFD2 CHROUT  Output Vector, chrout
+        JMP $2B66
+
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDY #$03
+        LDA ($55),Y
+        SEC 
+        SBC $58
+        BNE $2CCF
+        DEY 
+        LDA ($55),Y
+        CMP $57
+        BNE $2CC0
+        DEY 
+        LDA ($55),Y
+        CMP $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BNE $2CC0
+        DEY 
+        LDA ($55),Y
+        CMP $5D
+        PHP 
+        JSR $2C78
+        PLP 
+        BEQ $2CCB
+        BCS $2CCC
+        LDA #$FF
+        RTS 
+
+        LDA #$01
+        RTS 
+
+        BVC $2CD5
+        EOR #$FF
+        ORA #$01
+        PHP 
+        JSR $2C78
+        PLP 
+        RTS 
+
+; --- Lit 4 octets de parametres depuis le flux bytecode ---
+; ; Recupere ($55),Y pour Y=3,2,1,0 et les range dans $58, $57, X et A
+; ; respectivement. Utilisee par les routines de dessin (segments de mur,
+; ; texte) pour recuperer leurs arguments (position, longueur, etc.).
+        LDY #$03
+        LDA ($55),Y
+        STA $58
+        DEY 
+        LDA ($55),Y
+        STA $57
+        DEY 
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        RTS 
+
+; --- Comparaison/soustraction avec propagation de retenue sur 16 bits ---
+        STY $65      ;BITS   Floating -accum. #1: Overflow Digit
+        SEC 
+        SBC $65      ;BITS   Floating -accum. #1: Overflow Digit
+        BCS $2D02
+        DEX 
+        CPX #$FF
+        BNE $2D02
+        DEC $57
+        CPX $57
+        BNE $2D02
+        DEC $58
+        RTS 
+
+        JSR $2CA0
+        JMP $2DFD
+
+        STY $63      ;FACSGN Floating Accum. #1: Sign
+        CLC 
+        ADC $63      ;FACSGN Floating Accum. #1: Sign
+        BCC $2D19
+        INX 
+        BNE $2D19
+        INC $57
+        BNE $2D19
+        INC $58
+        RTS 
+
+        LDA #$00
+        TAX 
+; --- Empile params (A,X,$57,$58) dans le flux bytecode via ($55),Y ---
+        LDY #$00
+        STY $57
+        STY $58
+        PHA 
+        JSR $2C0E
+        LDY #$03
+        LDA $58
+        STA ($55),Y
+        DEY 
+        LDA $57
+        STA ($55),Y
+        DEY 
+        TXA 
+        STA ($55),Y
+        PLA 
+        DEY 
+        STA ($55),Y
+        RTS 
+
+; --- Sauvegarde A/X/$57/$58 dans $59/$5A/$5B/$5C ---
+        STA $59      ;TEMPF2 Temporary storage for FLPT value.
+        STX $5A
+        LDY $57
+        STY $5B
+        LDY $58
+        STY $5C
+        RTS 
+
+; --- Restaure A/X/$57/$58 depuis $59/$5A/$5B/$5C ---
+        LDA $5C
+        STA $58
+        LDA $5B
+        STA $57
+        LDX $5A
+        LDA $59      ;TEMPF2 Temporary storage for FLPT value.
+        RTS 
+
+; --- Teste si (A | X | $57 | $58) == 0 ---
+; ; Sert de condition d'arret pour les boucles de dessin/animation : le
+; ; "vecteur" courant (A,X,$57,$58) vaut zero => fin de la sequence.
+        TAY 
+        STX $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ORA $65      ;BITS   Floating -accum. #1: Overflow Digit
+        ORA $57
+        ORA $58
+        BEQ $2D63
+        TYA 
+        LDY #$01
+        RTS 
+
+        LDY #$00
+        STY $57
+        STY $58
+        JSR $2D75
+        JSR $2D99
+        LDA $5D
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        RTS 
+
+        STA $61
+        STX $62
+        LDA $57
+        STA $63      ;FACSGN Floating Accum. #1: Sign
+        LDA $58
+        STA $64      ;SGNFLG Pointer: Series Evaluation Constant Pointer
+        LDY #$00
+        LDA ($55),Y
+        INY 
+        STA $5D
+        LDA ($55),Y
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        INY 
+        LDA ($55),Y
+        STA $57
+        INY 
+        LDA ($55),Y
+        STA $58
+        JMP $2AD1
+
+        LDA #$00
+        STA $60
+        STA $67      ;ARGHO  Floating Accum. #2: Mantissa
+        STA $68
+        LDY #$20
+        ASL $5D
+        ROL $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ROL $57
+        ROL $58
+        ROL 
+        ROL $60
+        ROL $67      ;ARGHO  Floating Accum. #2: Mantissa
+        ROL $68
+        TAX 
+        CMP $61
+        LDA $60
+        SBC $62
+        LDA $67      ;ARGHO  Floating Accum. #2: Mantissa
+        SBC $63      ;FACSGN Floating Accum. #1: Sign
+        LDA $68
+        SBC $64      ;SGNFLG Pointer: Series Evaluation Constant Pointer
+        BCC $2DD7
+        STA $68
+        TXA 
+        SBC $61
+        TAX 
+        LDA $60
+        SBC $62
+        STA $60
+        LDA $67      ;ARGHO  Floating Accum. #2: Mantissa
+        SBC $63      ;FACSGN Floating Accum. #1: Sign
+        STA $67      ;ARGHO  Floating Accum. #2: Mantissa
+        INC $5D
+        TXA 
+        DEY 
+        BNE $2DA3
+        STA $5F      ;FACHO  Floating Accum. #1: Mantissa
+        RTS 
+
+        LDY #$00
+        STY $57
+        STY $58
+        JSR $2D75
+        JSR $2D99
+        LDA $67      ;ARGHO  Floating Accum. #2: Mantissa
+        STA $57
+        LDA $68
+        STA $58
+        LDA $5F      ;FACHO  Floating Accum. #1: Mantissa
+        LDX $60
+        RTS 
+
+        BNE $2DFF
+        LDX #$00
+        TXA 
+        RTS 
+
+        BNE $2DF9
+        LDX #$00
+        LDA #$01
+        RTS 
+
+        BEQ $2DFF
+        BMI $2DFF
+        LDX #$00
+        TXA 
+        RTS 
+
+        BEQ $2E10
+        BPL $2DFF
+        LDX #$00
+        TXA 
+        RTS 
+
+        BEQ $2DFF
+        BCC $2DFF
+        LDX #$00
+        TXA 
+        RTS 
+
+        BEQ $2DF9
+        LDX #$00
+        TXA 
+        ROL 
+        RTS 
+
+        JSR $2E4C
+        LDX $62
+        BEQ $2E3D
+        LDA ($5D),Y
+        STA ($5F),Y  ;FACHO  Floating Accum. #1: Mantissa
+        INY 
+        LDA ($5D),Y
+        STA ($5F),Y  ;FACHO  Floating Accum. #1: Mantissa
+        INY 
+        BNE $2E2A
+        INC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        INC $60
+        DEX 
+        BNE $2E2A
+        LDX $61
+        BEQ $2E49
+        LDA ($5D),Y
+        STA ($5F),Y  ;FACHO  Floating Accum. #1: Mantissa
+        INY 
+        DEX 
+        BNE $2E41
+        JMP $2C5D
+
+        STA $61
+        STX $62
+        JSR $2F54
+        INY 
+        LDA ($55),Y
+        TAX 
+        STX $60
+        DEY 
+        LDA ($55),Y
+        STA $5F      ;FACHO  Floating Accum. #1: Mantissa
+        RTS 
+
+        STA $61
+        STX $62
+        LDX #$00
+        BEQ $2E6F
+        STA $61
+        STX $62
+        JSR $2C5D
+        TAX 
+        LDY #$01
+        LDA ($55),Y
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        STA $5D
+        LSR $62
+        ROR $61
+        BCC $2E89
+        TXA 
+        STA ($5D),Y
+        INC $5D
+        BNE $2E89
+        INC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA $5D
+        CLC 
+        ADC $61
+        STA $5F      ;FACHO  Floating Accum. #1: Mantissa
+        LDA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ADC $62
+        STA $60
+        TXA 
+        LDX $62
+        BEQ $2EAE
+        STA ($5D),Y
+        STA ($5F),Y  ;FACHO  Floating Accum. #1: Mantissa
+        INY 
+        STA ($5D),Y
+        STA ($5F),Y  ;FACHO  Floating Accum. #1: Mantissa
+        INY 
+        BNE $2E9B
+        INC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        INC $60
+        DEX 
+        BNE $2E9B
+        LDY $61
+        BEQ $2EB9
+        DEY 
+        STA ($5D),Y
+        STA ($5F),Y  ;FACHO  Floating Accum. #1: Mantissa
+        BNE $2EB2
+        JMP $2C5D
+
+        STA $63      ;FACSGN Floating Accum. #1: Sign
+        JSR $2F54
+        TYA 
+        LDY #$08
+        LDX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        BEQ $2EE5
+        STA $64      ;SGNFLG Pointer: Series Evaluation Constant Pointer
+        LSR $63      ;FACSGN Floating Accum. #1: Sign
+        BCC $2ED9
+        CLC 
+        ADC $5D
+        TAX 
+        LDA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ADC $64      ;SGNFLG Pointer: Series Evaluation Constant Pointer
+        STA $64      ;SGNFLG Pointer: Series Evaluation Constant Pointer
+        TXA 
+        ROR $64      ;SGNFLG Pointer: Series Evaluation Constant Pointer
+        ROR 
+        ROR $63      ;FACSGN Floating Accum. #1: Sign
+        DEY 
+        BNE $2ECC
+        TAX 
+        LDA $63      ;FACSGN Floating Accum. #1: Sign
+        RTS 
+
+        LSR $63      ;FACSGN Floating Accum. #1: Sign
+        BCC $2EEC
+        CLC 
+        ADC $5D
+        ROR 
+        ROR $63      ;FACSGN Floating Accum. #1: Sign
+        DEY 
+        BNE $2EE7
+        TAX 
+        LDA $63      ;FACSGN Floating Accum. #1: Sign
+        RTS 
+
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ASL 
+        ROL $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ASL 
+        ROL $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ASL $5D
+        ROL 
+        TAX 
+        LDA $5D
+        RTS 
+
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ASL 
+        ROL $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        CLC 
+        ADC $5D
+        PHA 
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        TAX 
+        PLA 
+        RTS 
+
+        STA $5D
+        STX $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ASL 
+        ROL $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        CLC 
+        ADC $5D
+        STA $5D
+        TXA 
+        ADC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        ASL $5D
+        ROL 
+        TAX 
+        LDA $5D
+        RTS 
+
+        CPX #$00
+        BPL $2F47
+        CLC 
+        EOR #$FF
+        ADC #$01
+        PHA 
+        TXA 
+        EOR #$FF
+        ADC #$00
+        TAX 
+        PLA 
+        RTS 
+
+        LDY #$00
+        LDA ($55),Y
+        INC $55
+        BEQ $2F51
+        RTS 
+
+        INC $56
+        RTS 
+
+        LDY #$01
+        LDA ($55),Y
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        STA $5D
+        JMP $2C65
+
+        LDY #$00
+        LDA ($55),Y
+        LDY $55
+        BEQ $2F71
+        DEC $55
+        LDY #$00
+        STA ($55),Y
+        RTS 
+
+        DEC $56
+        DEC $55
+        STA ($55),Y
+        RTS 
+
+        LDA #$00
+        LDX #$00
+        PHA 
+        LDA $55
+        SEC 
+        SBC #$02
+        STA $55
+        BCS $2F88
+        DEC $56
+        LDY #$01
+        TXA 
+        STA ($55),Y
+        PLA 
+        DEY 
+        STA ($55),Y
+        RTS 
+
+        LDY #$03
+        LDA $55
+        SEC 
+        SBC #$02
+        STA $55
+        BCS $2F9F
+        DEC $56
+        LDA ($55),Y
+        TAX 
+        DEY 
+        LDA ($55),Y
+        LDY #$00
+        STA ($55),Y
+        INY 
+        TXA 
+        STA ($55),Y
+        RTS 
+
+        STA $427C
+        STX $427D
+        STA $427E
+        STX $427F
+        CLC 
+        LDA $427C
+        ADC #$B3
+        STA $427C
+        ADC $427D
+        STA $427D
+        ADC $427E
+        STA $427E
+        EOR $427C
+        AND #$7F
+        TAX 
+        LDA $427E
+        ADC $427F
+        STA $427F
+        EOR $427D
+        RTS 
+
+        LDX $8F
+        LDA $8E
+        JMP $2FAE
+
+        PHA 
+        STY $65      ;BITS   Floating -accum. #1: Overflow Digit
+        LDY #$01
+        LDA ($55),Y
+; --- Decremente le pointeur bytecode ($55/$56) de 2, avec retenue ---
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEY 
+        LDA ($55),Y
+        STA $5D
+        LDY $65      ;BITS   Floating -accum. #1: Overflow Digit
+        PLA 
+        STA ($5D),Y
+        JMP $2C65
+
+        LDY #$00
+        STA ($55),Y
+        INY 
+        PHA 
+        TXA 
+        STA ($55),Y
+        PLA 
+        RTS 
+
+; --- Empile A, X, $57 et $58 dans le flux bytecode via ($55),Y (variante incrementale) ---
+        LDY #$00
+        STA ($55),Y
+        INY 
+        PHA 
+        TXA 
+        STA ($55),Y
+        INY 
+        LDA $57
+        STA ($55),Y
+        INY 
+        LDA $58
+        STA ($55),Y
+        PLA 
+        RTS 
+
+        TYA 
+        EOR #$FF
+        SEC 
+        ADC $55
+        STA $55
+        BCS $302B
+        DEC $56
+        RTS 
+
+; --- Remplit une zone memoire de zeros ($429A et suivants) ---
+; ; Boucle sur 7 pages completes puis 0x77 octets supplementaires : initialise
+; ; une zone de travail juste apres la fin du programme charge.
+        LDA #<$429A
+        STA $5D
+        LDA #>$429A
+        STA $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        LDA #$00
+        TAY 
+        LDX #$07
+        BEQ $3045
+        STA ($5D),Y
+        INY 
+        BNE $303B
+        INC $5E      ;FACEXP Floating-Point Accumulator #1: Exponent
+        DEX 
+        BNE $303B
+        CPY #$77
+        BEQ $304E
+        STA ($5D),Y
+        INY 
+        BNE $3045
+        RTS 
+
+; données
+        BYTE $1E,$3C,$16
+        BYTE $3E,$20,$20
+        BYTE $A0,$A0
+        BYTE $66,$66
+        BYTE $5F,$7C,$69 ;SRE $697C,X
+        BYTE $7E,$E9,$6C
+        BYTE $DF,$7B,$01 ;DCP $017B,X
+        BYTE $0E,$19,$0F
+        BYTE $0E,$05,$20
+        BYTE $14,$08 ;NOP $08,X
+        BYTE $05,$12
+        BYTE $05,$3F
+        BYTE $17,$05 ;SLO $05,X
+        BYTE $0C,$0C,$20 ;NOP $200C
+        BYTE $10,$12
+        BYTE $05,$13
+        BYTE $13,$20 ;SLO ($20),Y
+        BYTE $13,$0F ;SLO ($0F),Y
+        BYTE $0D,$05,$14
+        BYTE $08
+        BYTE $09,$0E
+        BYTE $07,$20 ;SLO $20
+        BYTE $14,$08 ;NOP $08,X
+        BYTE $05,$0E
+        BYTE $2E,$93,$83
+        BYTE $8F,$92,$85 ;SAX $8592
+        BYTE $81,$90
+        BYTE $90,$85
+        BYTE $81,$8C
+        BYTE $81,$83
+        BYTE $83,$85 ;SAX ($85,X)
+        BYTE $90,$94
+        BYTE $85,$84
+        BYTE $92    ;JAM 
+        BYTE $85,$8A
+        BYTE $85,$83
+        BYTE $94,$85
+        BYTE $84,$20
+        BYTE $20,$1A,$18
+        BYTE $38
+        BYTE $31,$20
+        BYTE $16,$05
+        BYTE $12    ;JAM 
+        BYTE $13,$09 ;SLO ($09),Y
+        BYTE $0F,$0E,$20 ;SLO $200E
+        BYTE $0D,$2E,$05
+        BYTE $2E,$05,$16
+        BYTE $01,$0E
+        BYTE $13,$20 ;SLO ($20),Y
+        BYTE $31,$39
+        BYTE $38
+        BYTE $31,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$10
+        BYTE $05,$14
+        BYTE $20,$16,$05
+        BYTE $12    ;JAM 
+        BYTE $13,$09 ;SLO ($09),Y
+        BYTE $0F,$0E,$20 ;SLO $200E
+        BYTE $04,$2E ;NOP $2E
+        BYTE $03,$15 ;SLO ($15,X)
+        BYTE $12    ;JAM 
+        BYTE $12    ;JAM 
+        BYTE $01,$0E
+        BYTE $20,$20,$32
+        BYTE $30,$32
+        BYTE $31,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$6C
+        BYTE $62    ;JAM 
+        BYTE $7B,$20,$20 ;RRA $2020,Y
+        BYTE $20,$20,$20
+        BYTE $20,$20,$E1
+        BYTE $A0,$61
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $E2,$C0 ;NOP #$C0
+        BYTE $C0,$C0
+        BYTE $E2,$20 ;NOP #$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$AB
+        BYTE $8F,$AB,$20 ;SAX $20AB
+        BYTE $66,$62
+        BYTE $20,$20,$20
+        BYTE $20,$FB,$BD
+        BYTE $EC,$20,$6C
+        BYTE $A0,$20
+        BYTE $20,$20,$6C
+        BYTE $FC,$E2,$FE ;NOP $FEE2,X
+        BYTE $7B,$E1,$A0 ;RRA $A0E1,Y
+        BYTE $7B,$20,$FE ;RRA $FE20,Y
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$DD
+        BYTE $A0,$61
+        BYTE $E1,$A0
+        BYTE $A0,$A0
+        BYTE $FB,$A0,$A0 ;ISC $A0A0,Y
+        BYTE $A0,$A0
+        BYTE $61,$E1
+        BYTE $DD,$A0,$A0
+        BYTE $20,$A0,$EC
+        BYTE $A0,$A0
+        BYTE $61,$E1
+        BYTE $DD,$A0,$EC
+        BYTE $FE,$E1,$A0
+        BYTE $FF,$E2,$20 ;ISC $20E2,X
+        BYTE $E1,$DD
+        BYTE $A0,$7F
+        BYTE $AA
+        BYTE $FF,$A0,$61 ;ISC $61A0,X
+        BYTE $20,$20,$E1
+        BYTE $EC,$7F,$AA
+        BYTE $AA
+        BYTE $AA
+        BYTE $FF,$61,$20 ;ISC $2061,X
+        BYTE $20,$E1,$DD
+        BYTE $AA
+        BYTE $AA
+        BYTE $AA
+        BYTE $AA
+        BYTE $AA
+        BYTE $7B,$20,$20 ;RRA $2020,Y
+        BYTE $7C,$AB,$AA ;NOP $AAAB,X
+        BYTE $AA
+        BYTE $AA
+        BYTE $AA
+        BYTE $AA
+        BYTE $61,$20
+        BYTE $20,$20,$FB
+        BYTE $AA
+        BYTE $AA
+        BYTE $DD,$AA,$AA
+        BYTE $7E,$20,$20
+        BYTE $20,$E1,$AA
+        BYTE $AA
+        BYTE $DD,$AA,$AA
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$AA
+        BYTE $AA
+        BYTE $DD,$AA,$AA
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$AA
+        BYTE $AA
+        BYTE $7C,$AA,$AA ;NOP $AAAA,X
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$AA
+        BYTE $AA
+        BYTE $20,$AA,$AA
+        BYTE $20,$20,$20
+        BYTE $20,$20,$AA
+        BYTE $EC,$20,$AA
+        BYTE $EC,$20,$20
+        BYTE $20,$62,$62
+        BYTE $FE,$FC,$62
+        BYTE $A0,$62
+        BYTE $62    ;JAM 
+        BYTE $62    ;JAM 
+        BYTE $62    ;JAM 
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$68,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$66,$66
+        BYTE $66,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $66,$66
+        BYTE $66,$20
+        BYTE $20,$20,$20
+        BYTE $20,$FE,$A0
+        BYTE $7B,$66,$6C ;RRA $6C66,Y
+        BYTE $FC,$7B,$20 ;NOP $207B,X
+        BYTE $20,$E1,$A0
+        BYTE $A0,$A0
+        BYTE $8F,$A0,$A0 ;SAX $A0A0
+        BYTE $A0,$20
+        BYTE $20,$E1,$A0
+        BYTE $EC,$7F,$62
+        BYTE $E2,$EC ;NOP #$EC
+        BYTE $A0,$61
+        BYTE $20,$E1,$DD
+        BYTE $E1,$A0
+        BYTE $A0,$A0
+        BYTE $7B,$A0,$61 ;RRA $61A0,Y
+        BYTE $20,$E1,$DD
+        BYTE $E1,$A0
+        BYTE $A0,$EC
+        BYTE $FE,$A0,$7E
+        BYTE $20,$E1,$EC
+        BYTE $7F,$E2,$EC ;RRA $ECE2,X
+        BYTE $FE,$EC,$7E
+        BYTE $20,$20,$E1
+        BYTE $DD,$AA,$AA
+        BYTE $FF,$E2,$FE ;ISC $FEE2,X
+        BYTE $7B,$20,$20 ;RRA $2020,Y
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$92
+        BYTE $8F,$8C,$8C ;SAX $8C8C
+        BYTE $A0,$95
+        BYTE $90,$AC
+        BYTE $92    ;JAM 
+        BYTE $8F,$8C,$8C ;SAX $8C8C
+        BYTE $A0,$95
+        BYTE $90,$AC
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $93,$85 ;AHX ($85),Y
+        BYTE $85,$A0
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $81,$8D
+        BYTE $81,$9A
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $87,$A0 ;SAX $A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $94,$99
+        BYTE $92    ;JAM 
+        BYTE $81,$8E
+        BYTE $8E,$8F,$93
+        BYTE $81,$95
+        BYTE $92    ;JAM 
+        BYTE $95,$93
+        BYTE $A0,$92
+        BYTE $85,$98
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$8B
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $87,$A0 ;SAX $A0
+        BYTE $8F,$86,$A0 ;SAX $A086
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $84,$89
+        BYTE $8E,$8F,$93
+        BYTE $81,$95
+        BYTE $92    ;JAM 
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $A0,$88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$8C
+        BYTE $81,$89
+        BYTE $92    ;JAM 
+        BYTE $AE,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $90,$85
+        BYTE $92    ;JAM 
+        BYTE $86,$85
+        BYTE $83,$94 ;SAX ($94,X)
+        BYTE $8C,$99,$A0
+        BYTE $90,$92
+        BYTE $85,$93
+        BYTE $85,$92
+        BYTE $96,$85
+        BYTE $84,$A0
+        BYTE $A0,$A0
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $A0,$93
+        BYTE $89,$8C ;NOP #$8C
+        BYTE $89,$83 ;NOP #$83
+        BYTE $8F,$8E,$A0 ;SAX $A08E
+        BYTE $93,$89 ;AHX ($89),Y
+        BYTE $8E,$83,$85
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $90,$92
+        BYTE $85,$88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $94,$8F
+        BYTE $92    ;JAM 
+        BYTE $89,$83 ;NOP #$83
+        BYTE $A0,$94
+        BYTE $89,$8D ;NOP #$8D
+        BYTE $85,$93
+        BYTE $AC,$88,$85
+        BYTE $A0,$A0
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$82
+        BYTE $92    ;JAM 
+        BYTE $8F,$95,$87 ;SAX $8795
+        BYTE $88
+        BYTE $94,$A0
+        BYTE $94,$8F
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $86,$8F
+        BYTE $92    ;JAM 
+        BYTE $A0,$99
+        BYTE $8F,$95,$92 ;SAX $9295
+        BYTE $A0,$85
+        BYTE $8E,$94,$85
+        BYTE $92    ;JAM 
+        BYTE $94,$81
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $8D,$85,$8E
+        BYTE $94,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$81
+        BYTE $8E,$84,$A0
+        BYTE $85,$98
+        BYTE $88
+        BYTE $89,$8C ;NOP #$8C
+        BYTE $81,$92
+        BYTE $81,$94
+        BYTE $89,$8F ;NOP #$8F
+        BYTE $8E,$AE,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $89,$86 ;NOP #$86
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $84,$81
+        BYTE $92    ;JAM 
+        BYTE $85,$A0
+        BYTE $94,$8F
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $85,$8E
+        BYTE $94,$85
+        BYTE $92    ;JAM 
+        BYTE $A0,$88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$8C
+        BYTE $81,$89
+        BYTE $92    ;JAM 
+        BYTE $AC,$99,$8F
+        BYTE $95,$A0
+        BYTE $84,$8F
+        BYTE $A0,$93
+        BYTE $8F,$A0,$81 ;SAX $81A0
+        BYTE $94,$A0
+        BYTE $99,$8F,$95
+        BYTE $92    ;JAM 
+        BYTE $A0,$8F
+        BYTE $97,$8E ;SAX $8E,Y
+        BYTE $A0,$92
+        BYTE $89,$93 ;NOP #$93
+        BYTE $8B,$AE ;XAA #$AE
+        BYTE $A0,$A0
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $8D,$81,$8E
+        BYTE $81,$87
+        BYTE $85,$8D
+        BYTE $85,$8E
+        BYTE $94,$A0
+        BYTE $81,$83
+        BYTE $83,$85 ;SAX ($85,X)
+        BYTE $90,$94
+        BYTE $A0,$8E
+        BYTE $8F,$A0,$92 ;SAX $92A0
+        BYTE $85,$93
+        BYTE $90,$8F
+        BYTE $8E,$93,$89
+        BYTE $82,$89 ;NOP #$89
+        BYTE $8C,$89,$94
+        BYTE $99,$A0,$86
+        BYTE $8F,$92,$A0 ;SAX $A092
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $88
+        BYTE $85,$81
+        BYTE $8C,$94,$88
+        BYTE $A0,$81
+        BYTE $8E,$84,$A0
+        BYTE $93,$81 ;AHX ($81),Y
+        BYTE $86,$85
+        BYTE $94,$99
+        BYTE $A0,$8F
+        BYTE $86,$A0
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $81,$84
+        BYTE $96,$85
+        BYTE $8E,$94,$95
+        BYTE $92    ;JAM 
+        BYTE $85,$92
+        BYTE $A0,$97
+        BYTE $88
+        BYTE $8F,$A0,$85 ;SAX $85A0
+        BYTE $8E,$94,$85
+        BYTE $92    ;JAM 
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$92
+        BYTE $85,$81
+        BYTE $8C,$8D,$AE
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $A0,$8D
+        BYTE $81,$8E
+        BYTE $81,$87
+        BYTE $85,$8D
+        BYTE $85,$8E
+        BYTE $94,$A0
+        BYTE $81,$84
+        BYTE $96,$89
+        BYTE $93,$85 ;AHX ($85),Y
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $81,$94
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$89
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $8E,$8F,$94
+        BYTE $A0,$81
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $87,$81 ;SAX $81
+        BYTE $8D,$85,$A0
+        BYTE $86,$8F
+        BYTE $92    ;JAM 
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $8F,$93,$85 ;SAX $8593
+        BYTE $A0,$8F
+        BYTE $86,$A0
+        BYTE $81,$A0
+        BYTE $A0,$A0
+        BYTE $8E,$85,$92
+        BYTE $96,$8F
+        BYTE $95,$93
+        BYTE $A0,$84
+        BYTE $89,$93 ;NOP #$93
+        BYTE $90,$8F
+        BYTE $93,$89 ;AHX ($89),Y
+        BYTE $94,$89
+        BYTE $8F,$8E,$AE ;SAX $AE8E
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $89,$86 ;NOP #$86
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $81,$92
+        BYTE $85,$A0
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $A0,$81
+        BYTE $8E,$99,$A0
+        BYTE $A0,$A0
+        BYTE $84,$8F
+        BYTE $95,$82
+        BYTE $94,$AC
+        BYTE $94,$88
+        BYTE $85,$8E
+        BYTE $A0,$90
+        BYTE $92    ;JAM 
+        BYTE $85,$93
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $11,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$89
+        BYTE $86,$A0
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $93,$94 ;AHX ($94),Y
+        BYTE $92    ;JAM 
+        BYTE $95,$83
+        BYTE $94,$89
+        BYTE $8F,$8E,$93 ;SAX $938E
+        BYTE $A0,$81
+        BYTE $92    ;JAM 
+        BYTE $85,$A0
+        BYTE $A0,$A0
+        BYTE $8E,$85,$85
+        BYTE $84,$85
+        BYTE $84,$A0
+        BYTE $94,$8F
+        BYTE $A0,$90
+        BYTE $92    ;JAM 
+        BYTE $8F,$83,$85 ;SAX $8583
+        BYTE $85,$84
+        BYTE $AC,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $94,$88
+        BYTE $85,$8E
+        BYTE $A0,$90
+        BYTE $92    ;JAM 
+        BYTE $85,$93
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $09,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$8F
+        BYTE $94,$88
+        BYTE $85,$92
+        BYTE $97,$89 ;SAX $89,Y
+        BYTE $93,$85 ;AHX ($85),Y
+        BYTE $A0,$90
+        BYTE $92    ;JAM 
+        BYTE $85,$93
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $A0,$03
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $8F,$8E,$8C ;SAX $8C8E
+        BYTE $99,$A0,$83
+        BYTE $8F,$8E,$94 ;SAX $948E
+        BYTE $92    ;JAM 
+        BYTE $8F,$8C,$93 ;SAX $938C
+        BYTE $A0,$A0
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $92    ;JAM 
+        BYTE $85,$91
+        BYTE $95,$89
+        BYTE $92    ;JAM 
+        BYTE $85,$A0
+        BYTE $81,$92
+        BYTE $85,$BA
+        BYTE $C0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $34,$AE ;NOP $AE,X
+        BYTE $AE,$AE,$AE
+        BYTE $94,$95
+        BYTE $92    ;JAM 
+        BYTE $8E,$A0,$8C
+        BYTE $85,$86
+        BYTE $94,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$38
+        BYTE $AE,$AE,$AE
+        BYTE $AE,$8D,$8F
+        BYTE $96,$85
+        BYTE $A0,$86
+        BYTE $8F,$92,$97 ;SAX $9792
+        BYTE $81,$92
+        BYTE $84,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $36,$AE
+        BYTE $AE,$AE,$AE
+        BYTE $94,$95
+        BYTE $92    ;JAM 
+        BYTE $8E,$A0,$92
+        BYTE $89,$87 ;NOP #$87
+        BYTE $88
+        BYTE $94,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $86,$95
+        BYTE $92    ;JAM 
+        BYTE $94,$88
+        BYTE $85,$92
+        BYTE $A0,$89
+        BYTE $8E,$86,$8F
+        BYTE $92    ;JAM 
+        BYTE $8D,$81,$94
+        BYTE $89,$8F ;NOP #$8F
+        BYTE $8E,$A0,$A0
+        BYTE $A0,$89
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $90,$92
+        BYTE $8F,$96,$89 ;SAX $8996
+        BYTE $84,$85
+        BYTE $84,$A0
+        BYTE $84,$95
+        BYTE $92    ;JAM 
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $87,$A0 ;SAX $A0
+        BYTE $A0,$A0
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $85,$8E
+        BYTE $83,$8F ;SAX ($8F,X)
+        BYTE $95,$8E
+        BYTE $94,$85
+        BYTE $92    ;JAM 
+        BYTE $AE,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $86,$8F
+        BYTE $92    ;JAM 
+        BYTE $A0,$85
+        BYTE $81,$83
+        BYTE $88
+        BYTE $A0,$8D
+        BYTE $8F,$96,$85 ;SAX $8596
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$93
+        BYTE $83,$8F ;SAX ($8F,X)
+        BYTE $92    ;JAM 
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $87,$A0 ;SAX $A0
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$81
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $86,$8F
+        BYTE $8C,$8C,$8F
+        BYTE $97,$93 ;SAX $93,Y
+        BYTE $A0,$A0
+        BYTE $A0,$B5
+        BYTE $A0,$90
+        BYTE $94,$93
+        BYTE $C0,$97
+        BYTE $88
+        BYTE $89,$8C ;NOP #$8C
+        BYTE $85,$A0
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$94
+        BYTE $92    ;JAM 
+        BYTE $81,$83
+        BYTE $8B,$89 ;XAA #$89
+        BYTE $8E,$87,$A0
+        BYTE $99,$8F,$95
+        BYTE $AE,$A0,$B2
+        BYTE $B0,$B0
+        BYTE $A0,$90
+        BYTE $94,$93
+        BYTE $C0,$89
+        BYTE $86,$A0
+        BYTE $99,$8F,$95
+        BYTE $A0,$85
+        BYTE $93,$83 ;AHX ($83),Y
+        BYTE $81,$90
+        BYTE $85,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$8C
+        BYTE $81,$89
+        BYTE $92    ;JAM 
+        BYTE $AE,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$93
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $83,$85 ;SAX ($85,X)
+        BYTE $A0,$92
+        BYTE $85,$98
+        BYTE $A0,$89
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $81,$8C
+        BYTE $97,$81 ;SAX $81,Y
+        BYTE $99,$93,$A0
+        BYTE $94,$92
+        BYTE $99,$89,$8E
+        BYTE $87,$A0 ;SAX $A0
+        BYTE $94,$8F
+        BYTE $A0,$8D
+        BYTE $8F,$96,$85 ;SAX $8596
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $94,$8F
+        BYTE $97,$81 ;SAX $81,Y
+        BYTE $92    ;JAM 
+        BYTE $84,$93
+        BYTE $A0,$88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$90
+        BYTE $92    ;JAM 
+        BYTE $85,$99
+        BYTE $AC,$81,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$93
+        BYTE $8B,$89 ;XAA #$89
+        BYTE $8C,$86,$95
+        BYTE $8C,$A0,$81
+        BYTE $84,$96
+        BYTE $85,$8E
+        BYTE $94,$95
+        BYTE $92    ;JAM 
+        BYTE $85,$92
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $83,$81 ;SAX ($81,X)
+        BYTE $8E,$A0,$83
+        BYTE $8F,$8E,$94 ;SAX $948E
+        BYTE $92    ;JAM 
+        BYTE $8F,$8C,$A0 ;SAX $A08C
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $8D,$8F,$8E
+        BYTE $93,$94 ;AHX ($94),Y
+        BYTE $85,$92
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $8D,$8F,$96
+        BYTE $85,$8D
+        BYTE $85,$8E
+        BYTE $94,$93
+        BYTE $A0,$94
+        BYTE $8F,$A0,$89 ;SAX $89A0
+        BYTE $8D,$90,$92
+        BYTE $8F,$96,$85 ;SAX $8596
+        BYTE $A0,$88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$93
+        BYTE $83,$8F ;SAX ($8F,X)
+        BYTE $92    ;JAM 
+        BYTE $85,$AE
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $85,$93
+        BYTE $83,$81 ;SAX ($81,X)
+        BYTE $90,$85
+        BYTE $A0,$92
+        BYTE $8F,$95,$94 ;SAX $9495
+        BYTE $85,$AC
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$97
+        BYTE $88
+        BYTE $89,$83 ;NOP #$83
+        BYTE $88
+        BYTE $A0,$89
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $81,$94
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $85,$8E
+        BYTE $84,$A0
+        BYTE $A0,$A0
+        BYTE $8F,$86,$A0 ;SAX $A086
+        BYTE $81,$A0
+        BYTE $83,$95 ;SAX ($95,X)
+        BYTE $8C,$C0,$84
+        BYTE $85,$C0
+        BYTE $93,$81 ;AHX ($81),Y
+        BYTE $83,$AC ;SAX ($AC,X)
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $96,$89
+        BYTE $93,$89 ;AHX ($89),Y
+        BYTE $82,$8C ;NOP #$8C
+        BYTE $85,$A0
+        BYTE $95,$90
+        BYTE $A0,$94
+        BYTE $8F,$A0,$B5 ;SAX $B5A0
+        BYTE $A0,$8D
+        BYTE $8F,$96,$85 ;SAX $8596
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $81,$97
+        BYTE $81,$99
+        BYTE $AE,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $87,$81 ;SAX $81
+        BYTE $8D,$85,$A0
+        BYTE $85,$8E
+        BYTE $84,$93
+        BYTE $A0,$97
+        BYTE $88
+        BYTE $85,$8E
+        BYTE $A0,$A0
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $83,$81 ;SAX ($81,X)
+        BYTE $94,$83
+        BYTE $88
+        BYTE $85,$93
+        BYTE $A0,$99
+        BYTE $8F,$95,$AE ;SAX $AE95
+        BYTE $89,$86 ;NOP #$86
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $85,$93
+        BYTE $83,$81 ;SAX ($81,X)
+        BYTE $90,$85
+        BYTE $A0,$81
+        BYTE $A0,$8E
+        BYTE $85,$97
+        BYTE $A0,$8D
+        BYTE $81,$9A
+        BYTE $85,$A0
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$A0
+        BYTE $87,$85 ;SAX $85
+        BYTE $8E,$85,$92
+        BYTE $81,$94
+        BYTE $85,$84
+        BYTE $A0,$81
+        BYTE $8E,$84,$A0
+        BYTE $99,$8F,$95
+        BYTE $92    ;JAM 
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $90,$92
+        BYTE $85,$96
+        BYTE $89,$8F ;NOP #$8F
+        BYTE $95,$93
+        BYTE $A0,$93
+        BYTE $83,$8F ;SAX ($8F,X)
+        BYTE $92    ;JAM 
+        BYTE $85,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$83
+        BYTE $81,$92
+        BYTE $92    ;JAM 
+        BYTE $89,$85 ;NOP #$85
+        BYTE $84,$A0
+        BYTE $86,$8F
+        BYTE $92    ;JAM 
+        BYTE $97,$81 ;SAX $81,Y
+        BYTE $92    ;JAM 
+        BYTE $84,$AE
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $94,$88
+        BYTE $85,$A0
+        BYTE $8D,$89,$93
+        BYTE $94,$93
+        BYTE $A0,$8F
+        BYTE $86,$A0
+        BYTE $94,$89
+        BYTE $8D,$85,$A0
+        BYTE $A0,$A0
+        BYTE $97,$89 ;SAX $89,Y
+        BYTE $8C,$8C,$A0
+        BYTE $90,$81
+        BYTE $93,$93 ;AHX ($93),Y
+        BYTE $A0,$8F
+        BYTE $96,$85
+        BYTE $92    ;JAM 
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $A0,$A0
+        BYTE $A0,$86
+        BYTE $8F,$92,$A0 ;SAX $A092
+        BYTE $81,$A0
+        BYTE $86,$85
+        BYTE $97,$A0 ;SAX $A0,Y
+        BYTE $93,$85 ;AHX ($85),Y
+        BYTE $83,$8F ;SAX ($8F,X)
+        BYTE $8E,$84,$93
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$97
+        BYTE $88
+        BYTE $89,$8C ;NOP #$8C
+        BYTE $85,$A0
+        BYTE $94,$92
+        BYTE $81,$8E
+        BYTE $93,$90 ;AHX ($90),Y
+        BYTE $8F,$92,$94 ;SAX $9492
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $87,$A0 ;SAX $A0
+        BYTE $A0,$A0
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $94,$8F
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $8C,$81,$89
+        BYTE $92    ;JAM 
+        BYTE $A0,$8F
+        BYTE $86,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$94
+        BYTE $99,$92,$81
+        BYTE $8E,$8E,$8F
+        BYTE $93,$81 ;AHX ($81),Y
+        BYTE $95,$92
+        BYTE $95,$93
+        BYTE $A0,$92
+        BYTE $85,$98
+        BYTE $AE,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $82,$85 ;NOP #$85
+        BYTE $93,$94 ;AHX ($94),Y
+        BYTE $A0,$8F
+        BYTE $86,$A0
+        BYTE $8C,$95,$83
+        BYTE $8B,$AE ;XAA #$AE
+        BYTE $AE,$AE,$AE
+        BYTE $AE,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$92
+        BYTE $85,$98
+        BYTE $A0,$8C
+        BYTE $89,$85 ;NOP #$85
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $A0,$97
+        BYTE $81,$89
+        BYTE $94,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$12
+        BYTE $15,$0E
+        BYTE $A0,$88
+        BYTE $85,$A0
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$82
+        BYTE $85,$88
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $84,$A0
+        BYTE $99,$8F,$95
+        BYTE $A0,$A0
+        BYTE $12    ;JAM 
+        BYTE $15,$0E
+        BYTE $A0,$88
+        BYTE $85,$A0
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$82
+        BYTE $85,$93
+        BYTE $89,$84 ;NOP #$84
+        BYTE $85,$A0
+        BYTE $99,$8F,$95
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $92    ;JAM 
+        BYTE $85,$98
+        BYTE $A0,$88
+        BYTE $81,$93
+        BYTE $A0,$93
+        BYTE $85,$85
+        BYTE $8E,$A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $A0,$A0
+        BYTE $A0,$86
+        BYTE $8F,$8F,$94 ;SAX $948F
+        BYTE $93,$94 ;AHX ($94),Y
+        BYTE $85,$90
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $81,$90
+        BYTE $90,$92
+        BYTE $8F,$81,$83 ;SAX $8381
+        BYTE $88
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $87,$A0 ;SAX $A0
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$88
+        BYTE $95,$8E
+        BYTE $94,$89
+        BYTE $8E,$87,$A0
+        BYTE $86,$8F
+        BYTE $92    ;JAM 
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $99,$8F,$95
+        BYTE $A0,$A0
+        BYTE $A0,$88
+        BYTE $81,$96
+        BYTE $85,$A0
+        BYTE $85,$8C
+        BYTE $95,$84
+        BYTE $85,$84
+        BYTE $A0,$88
+        BYTE $89,$8D ;NOP #$8D
+        BYTE $A0,$A0
+        BYTE $A0,$81
+        BYTE $8E,$84,$A0
+        BYTE $A0,$93
+        BYTE $83,$8F ;SAX ($8F,X)
+        BYTE $92    ;JAM 
+        BYTE $85,$84
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $90,$8F
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $94,$93
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $92    ;JAM 
+        BYTE $85,$98
+        BYTE $A0,$89
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $96,$85
+        BYTE $92    ;JAM 
+        BYTE $99,$A0,$81
+        BYTE $8E,$87,$92
+        BYTE $99,$AE,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$99
+        BYTE $8F,$95,$A7 ;SAX $A795
+        BYTE $8C,$8C,$A0
+        BYTE $8E,$85,$85
+        BYTE $84,$A0
+        BYTE $A0,$8D
+        BYTE $8F,$92,$85 ;SAX $8592
+        BYTE $A0,$A0
+        BYTE $8C,$95,$83
+        BYTE $8B,$A0 ;XAA #$A0
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $89,$93 ;NOP #$93
+        BYTE $A0,$A0
+        BYTE $94,$89
+        BYTE $8D,$85,$AE
+        BYTE $0B,$01 ;ANC #$01
+        BYTE $0C,$E2,$01 ;NOP $01E2
+        BYTE $0C,$20,$00 ;NOP $0020
+        BYTE $0B,$01 ;ANC #$01
+        BYTE $0C,$E2,$01 ;NOP $01E2
+        BYTE $0C,$20,$01 ;NOP $0120
+        BYTE $0C,$FC,$00 ;NOP $00FC
+        BYTE $0B,$01 ;ANC #$01
+        BYTE $0C,$E2,$02 ;NOP $02E2
+        BYTE $0B,$EC ;ANC #$EC
+        BYTE $20,$03,$0B
+        BYTE $EC,$20,$E1
+        BYTE $02    ;JAM 
+        BYTE $0B,$FC ;ANC #$FC
+        BYTE $FE,$00,$0A
+        BYTE $02    ;JAM 
+        BYTE $0B,$EC ;ANC #$EC
+        BYTE $E2,$02 ;NOP #$02
+        BYTE $0B,$FC ;ANC #$FC
+        BYTE $6C,$03,$0B
+
+        BYTE $20,$7E,$7C
+        BYTE $03,$0B ;SLO ($0B,X)
+        BYTE $7B,$20,$7F ;RRA $7F20,Y
+        BYTE $03,$0B ;SLO ($0B,X)
+        BYTE $62    ;JAM 
+        BYTE $62    ;JAM 
+        BYTE $7C,$00,$0A ;NOP $0A00,X
+        BYTE $03,$0B ;SLO ($0B,X)
+        BYTE $61,$20
+        BYTE $FB,$03,$0B ;ISC $0B03,Y
+        BYTE $FC,$20,$FE ;NOP $FE20,X
+        BYTE $04,$0A ;NOP $0A
+        BYTE $EC,$20,$E2
+        BYTE $E1,$04
+        BYTE $0A
+        BYTE $61,$7B
+        BYTE $20,$7C,$03
+        BYTE $0B,$20 ;ANC #$20
+        BYTE $20,$20,$05
+        BYTE $0A
+        BYTE $EC,$20,$6C
+        BYTE $62    ;JAM 
+        BYTE $FE,$00,$09
+        BYTE $03,$0B ;SLO ($0B,X)
+        BYTE $7E,$20,$7C
+        BYTE $04,$0A ;NOP $0A
+        BYTE $61,$7C
+        BYTE $20,$7E,$04
+        BYTE $0A
+        BYTE $FC,$7F,$62 ;NOP $627F,X
+        BYTE $FF,$05,$0A ;ISC $0A05,X
+        BYTE $61,$20
+        BYTE $E2,$20 ;NOP #$20
+        BYTE $E1,$05
+        BYTE $0A
+        BYTE $FC,$20,$20 ;NOP $2020,X
+        BYTE $20,$20,$05
+        BYTE $0A
+        BYTE $EC,$20,$20
+        BYTE $20,$E1,$05
+        BYTE $0A
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$06
+        BYTE $09,$EC
+        BYTE $7E,$E1,$62
+        BYTE $20,$E1,$02
+        BYTE $0D,$62,$62
+        BYTE $00
+        BYTE $07
+        BYTE $03,$0B ;SLO ($0B,X)
+        BYTE $EC,$E2,$E2
+        BYTE $04,$0B ;NOP $0B
+        BYTE $6C,$20,$6C
+
+        BYTE $E1,$05
+        BYTE $0A
+        BYTE $EC,$20,$20
+        BYTE $20,$E1,$05
+        BYTE $0A
+        BYTE $61,$FB
+        BYTE $62    ;JAM 
+        BYTE $FE,$7C,$06
+        BYTE $0A
+        BYTE $20,$7C,$A0
+        BYTE $7E,$20,$FB
+        BYTE $07,$09 ;SLO $09
+        BYTE $EC,$20,$20
+        BYTE $20,$20,$20
+        BYTE $E1,$07
+        BYTE $09,$61
+        BYTE $E1,$20
+        BYTE $20,$20,$6C
+        BYTE $A0,$07
+        BYTE $09,$FC
+        BYTE $61,$20
+        BYTE $20,$20,$20
+        BYTE $FB,$06,$0A ;ISC $0A06,Y
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $06,$0A
+        BYTE $20,$20,$20
+        BYTE $E1,$7E
+        BYTE $20,$07,$0A
+        BYTE $7B,$20,$61 ;RRA $6120,Y
+        BYTE $20,$7B,$20
+        BYTE $E2,$03 ;NOP #$03
+        BYTE $09,$E2
+        BYTE $20,$E1,$00
+        BYTE $06,$04
+        BYTE $0A
+        BYTE $EC,$20,$20
+        BYTE $7C,$05,$0A ;NOP $0A05,X
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$05
+        BYTE $0A
+        BYTE $20,$7E,$20
+        BYTE $7C,$E1,$07 ;NOP $07E1,X
+        BYTE $09,$61
+        BYTE $FC,$20,$20 ;NOP $2020,X
+        BYTE $6C,$7E,$A0
+
+        BYTE $07,$09 ;SLO $09
+        BYTE $7E,$E1,$FC
+        BYTE $62    ;JAM 
+        BYTE $EC,$20,$E1
+        BYTE $07,$09 ;SLO $09
+        BYTE $20,$20,$FB
+        BYTE $A0,$20
+        BYTE $20,$20,$08
+        BYTE $09,$7B
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$20
+        BYTE $E1,$08
+        BYTE $09,$A0
+        BYTE $20,$20,$20
+        BYTE $20,$7C,$FC
+        BYTE $20,$08,$09
+        BYTE $7E,$20,$20
+        BYTE $20,$20,$20
+        BYTE $7C,$62,$08 ;NOP $0862,X
+        BYTE $08
+        BYTE $7E,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$09
+        BYTE $08
+        BYTE $20,$20,$7B
+        BYTE $20,$20,$6C
+        BYTE $20,$20,$E1
+        BYTE $09,$08
+        BYTE $7B,$20,$A0 ;RRA $A020,Y
+        BYTE $7B,$20,$7E ;RRA $7E20,Y
+        BYTE $20,$20,$FE
+        BYTE $0A
+        BYTE $07,$E2 ;SLO $E2
+        BYTE $20,$6C,$A0
+        BYTE $FC,$20,$E1 ;NOP $E120,X
+        BYTE $20,$6C,$A0
+        BYTE $03,$0E ;SLO ($0E,X)
+        BYTE $7B,$7C,$FB ;RRA $FB7C,Y
+        BYTE $00
+        BYTE $04
+        BYTE $04,$0A ;NOP $0A
+        BYTE $E2,$E2 ;NOP #$E2
+        BYTE $E2,$FB ;NOP #$FB
+        BYTE $06,$09
+        BYTE $7E,$20,$20
+        BYTE $20,$20,$E1
+        BYTE $07,$08 ;SLO $08
+        BYTE $61,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$07
+        BYTE $08
+        BYTE $61,$7C
+        BYTE $61,$20
+        BYTE $20,$FB,$6C
+        BYTE $09,$07
+        BYTE $EC,$6C,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$FB
+        BYTE $0A
+        BYTE $06,$A0
+        BYTE $20,$20,$FC
+        BYTE $20,$7E,$7E
+        BYTE $6C,$20,$7C
+
+        BYTE $0A
+        BYTE $06,$61
+        BYTE $20,$20,$FB
+        BYTE $FC,$62,$62 ;NOP $6262,X
+        BYTE $EC,$20,$20
+        BYTE $0A
+        BYTE $06,$7E
+        BYTE $20,$20,$20
+        BYTE $A0,$A0
+        BYTE $A0,$7E
+        BYTE $20,$20,$0B
+        BYTE $05,$EC
+        BYTE $20,$E1,$20
+        BYTE $20,$7C,$E2
+        BYTE $7E,$20,$20
+        BYTE $6C,$0B,$05
+
+        BYTE $61,$6C
+        BYTE $61,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $FE,$0B,$05
+        BYTE $61,$FE
+        BYTE $7E,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$E1
+        BYTE $0B,$06 ;ANC #$06
+        BYTE $A0,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$FB
+        BYTE $0B,$06 ;ANC #$06
+        BYTE $EC,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$0B
+        BYTE $06,$61
+        BYTE $20,$20,$20
+        BYTE $20,$20,$E1
+        BYTE $7B,$20,$20 ;RRA $2020,Y
+        BYTE $6C,$0B,$06
+
+        BYTE $A0,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$E1
+        BYTE $0A
+        BYTE $07,$61 ;SLO $61
+        BYTE $20,$6C,$61
+        BYTE $20,$6C,$FF
+        BYTE $20,$20,$FB
+        BYTE $0C,$05,$EC ;NOP $EC05
+        BYTE $E2,$20 ;NOP #$20
+        BYTE $20,$E1,$A0
+        BYTE $62    ;JAM 
+        BYTE $A0,$FC
+        BYTE $62    ;JAM 
+        BYTE $62    ;JAM 
+        BYTE $62    ;JAM 
+        BYTE $05,$05
+        BYTE $FC,$62,$62 ;NOP $6262,X
+        BYTE $62    ;JAM 
+        BYTE $A0,$00
+        BYTE $03,$06 ;SLO ($06,X)
+        BYTE $0A
+        BYTE $EC,$E2,$E2
+        BYTE $E2,$E2 ;NOP #$E2
+        BYTE $FB,$08,$09 ;ISC $0908,Y
+        BYTE $EC,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$FB,$0A
+        BYTE $08
+        BYTE $EC,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $A0,$0B
+        BYTE $07,$A0 ;SLO $A0
+        BYTE $7E,$20,$8F
+        BYTE $20,$20,$20
+        BYTE $20,$8F,$20
+        BYTE $E1,$0B
+        BYTE $07,$A0 ;SLO $A0
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $E1,$0B
+        BYTE $07,$EC ;SLO $EC
+        BYTE $20,$20,$20
+        BYTE $20,$7B,$6C
+        BYTE $20,$20,$20
+        BYTE $E1,$0D
+        BYTE $06,$EC
+        BYTE $20,$20,$68
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $68
+        BYTE $7C,$A0,$0E ;NOP $0EA0,X
+        BYTE $05,$A0
+        BYTE $20,$20,$E6
+        BYTE $A0,$96
+        BYTE $96,$68
+        BYTE $68
+        BYTE $96,$96
+        BYTE $E6,$20
+        BYTE $E1,$0F
+        BYTE $05,$61
+        BYTE $20,$20,$20
+        BYTE $E6,$A0
+        BYTE $A0,$96
+        BYTE $96,$A0
+        BYTE $E8
+        BYTE $E6,$20
+        BYTE $20,$A0,$0F
+        BYTE $05,$61
+        BYTE $20,$20,$20
+        BYTE $E6,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $E6,$20
+        BYTE $20,$20,$FB
+        BYTE $0F,$05,$61 ;SLO $6105
+        BYTE $20,$20,$20
+        BYTE $20,$E6,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$E6
+        BYTE $20,$20,$20
+        BYTE $E1,$0F
+        BYTE $05,$A0
+        BYTE $E6,$20
+        BYTE $20,$20,$E6
+        BYTE $E8
+        BYTE $A0,$A0
+        BYTE $E8
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$10
+        BYTE $05,$A0
+        BYTE $20,$E6,$20
+        BYTE $20,$20,$E6
+        BYTE $E6,$E6
+        BYTE $E6,$20
+        BYTE $20,$20,$20
+        BYTE $7C,$A0,$10 ;NOP $10A0,X
+        BYTE $05,$A0
+        BYTE $7B,$20,$E6 ;RRA $E620,Y
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$E6
+        BYTE $20,$20,$A0
+        BYTE $0F,$06,$FC ;SLO $FC06
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$E6,$20
+        BYTE $20,$A0,$0F
+        BYTE $06,$A0
+        BYTE $7B,$20,$20 ;RRA $2020,Y
+        BYTE $6C,$20,$20
+
+        BYTE $E1,$7E
+        BYTE $20,$20,$E6
+        BYTE $20,$20,$A0
+        BYTE $0E,$07,$61
+        BYTE $20,$20,$E1
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$E6,$6C
+        BYTE $A0,$0F
+        BYTE $05,$EC
+        BYTE $E2,$20 ;NOP #$20
+        BYTE $20,$20,$E1
+        BYTE $61,$20
+        BYTE $20,$6C,$61
+        BYTE $20,$20,$E1
+        BYTE $A0,$0F
+        BYTE $05,$61
+        BYTE $20,$20,$20
+        BYTE $6C,$A0,$A0
+
+        BYTE $62    ;JAM 
+        BYTE $FE,$A0,$61
+        BYTE $20,$20,$7C
+        BYTE $FB,$06,$0F ;ISC $0F06,Y
+        BYTE $A0,$20
+        BYTE $20,$20,$20
+        BYTE $FB,$05,$10 ;ISC $1005,Y
+        BYTE $FC,$62,$62 ;NOP $6262,X
+        BYTE $62    ;JAM 
+        BYTE $FE,$00,$00
+        BYTE $19,$00,$20
+        BYTE $20,$62,$FE
+        BYTE $A0,$A0
+        BYTE $7E,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$7C
+        BYTE $A0,$A0
+        BYTE $7B,$20,$61 ;RRA $6120,Y
+        BYTE $20,$20,$19
+        BYTE $00
+        BYTE $A0
+        BYTE $A0,$A0
+        BYTE $A0,$EC
+        BYTE $7E,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $E1,$A0
+        BYTE $A0,$A0
+        BYTE $7B,$7C,$20 ;RRA $207C,Y
+        BYTE $20,$19,$00
+        BYTE $E2,$E2 ;NOP #$E2
+        BYTE $E2,$7E ;NOP #$7E
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$FB
+        BYTE $A0,$A0
+        BYTE $A0,$FC
+        BYTE $62    ;JAM 
+        BYTE $FE,$19,$00
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$E2,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$62,$A0
+        BYTE $A0,$7B
+        BYTE $20,$20,$20
+        BYTE $62    ;JAM 
+        BYTE $62    ;JAM 
+        BYTE $20,$20,$20
+        BYTE $20,$7C,$E2
+        BYTE $E2,$E2 ;NOP #$E2
+        BYTE $19,$00,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $7C,$FB,$A0 ;NOP $A0FB,X
+        BYTE $A0,$7E
+        BYTE $20,$20,$E1
+        BYTE $A0,$A0
+        BYTE $FC,$20,$20 ;NOP $2020,X
+        BYTE $20,$20,$20
+        BYTE $20,$20,$19
+        BYTE $00
+        BYTE $20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $E2,$E2 ;NOP #$E2
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$19,$00
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$19,$00
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$19,$00
+        BYTE $20,$6C,$7B
+        BYTE $20,$62,$A0
+        BYTE $A0,$20
+        BYTE $E1,$A0
+        BYTE $A0,$7F
+        BYTE $20,$A0,$A0
+        BYTE $EC,$7B,$20
+        BYTE $6C,$62,$62
+
+        BYTE $7B,$20,$20 ;RRA $2020,Y
+        BYTE $20,$19,$00
+        BYTE $E1,$A0
+        BYTE $61,$7B
+        BYTE $FB,$A0,$61 ;ISC $61A0,Y
+        BYTE $7B,$E1,$A0 ;RRA $A0E1,Y
+        BYTE $EC,$FE,$20
+        BYTE $FB,$A0,$7F ;ISC $7FA0,Y
+        BYTE $61,$20
+        BYTE $E1,$A0
+        BYTE $A0,$EC
+        BYTE $7B,$6C,$62 ;RRA $626C,Y
+        BYTE $19,$00,$E1
+        BYTE $A0,$E1
+        BYTE $FC,$E1,$A0 ;NOP $A0E1,X
+        BYTE $E1,$FC
+        BYTE $E1,$A0
+        BYTE $7F,$A0,$7B ;RRA $7BA0,X
+        BYTE $E1,$EC
+        BYTE $FE,$A0,$20
+        BYTE $E1,$A0
+        BYTE $A0,$7F
+        BYTE $61,$E1
+        BYTE $A0,$19
+        BYTE $00
+        BYTE $7C
+        BYTE $61,$A0
+        BYTE $A0,$61
+        BYTE $7F,$A0,$A0 ;RRA $A0A0,X
+        BYTE $7B,$6C,$A0 ;RRA $A06C,Y
+        BYTE $A0,$FC
+        BYTE $20,$FE,$A0
+        BYTE $A0,$7B
+        BYTE $20,$A0,$7F
+        BYTE $A0,$61
+        BYTE $E1,$A0
+        BYTE $19,$00,$7B
+        BYTE $7F,$A0,$A0 ;RRA $A0A0,X
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $62    ;JAM 
+        BYTE $62    ;JAM 
+        BYTE $A0,$A0
+        BYTE $A0,$20
+        BYTE $EC,$19,$00
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$62
+        BYTE $FE,$19,$00
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$19
+        BYTE $00
+        BYTE $A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$A0
+        BYTE $7E,$7C,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$19
+        BYTE $00
+        BYTE $7E
+        BYTE $6C,$7B,$A0
+
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$19
+        BYTE $00
+        BYTE $20
+        BYTE $FE,$A0,$E1
+        BYTE $A0,$A0
+        BYTE $EC,$E2,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$E1
+        BYTE $A0,$A0
+        BYTE $E1,$EC
+        BYTE $20,$62,$FE
+        BYTE $E1,$A0
+        BYTE $A0,$EC
+        BYTE $FB,$A0,$A0 ;ISC $A0A0,Y
+        BYTE $A0,$E2
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$20
+        BYTE $E2,$A0 ;NOP #$A0
+        BYTE $7C,$20,$FE ;NOP $FE20,X
+        BYTE $A0,$A0
+        BYTE $61,$A0
+        BYTE $EC,$20,$62
+        BYTE $FB,$A0,$61 ;ISC $61A0,Y
+        BYTE $6C,$FF,$A0
+
+        BYTE $EC,$20,$FF
+        BYTE $A0,$A0
+        BYTE $FB,$19,$00 ;ISC $0019,Y
+        BYTE $20,$20,$20
+        BYTE $20,$E1,$A0
+        BYTE $A0,$A0
+        BYTE $E1,$A0
+        BYTE $7E,$FE,$A0
+        BYTE $61,$A0
+        BYTE $20,$A0,$FC
+        BYTE $FB,$7E,$FE ;ISC $FE7E,Y
+        BYTE $A0,$FF
+        BYTE $61,$E1
+        BYTE $00
+        BYTE $00
+        BYTE $19,$00,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $19,$00,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $19,$00,$20
+        BYTE $20,$20,$20
+        BYTE $20,$6C,$62
+        BYTE $62    ;JAM 
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$19
+        BYTE $00
+        BYTE $20
+        BYTE $62    ;JAM 
+        BYTE $A0,$61
+        BYTE $20,$E1,$A0
+        BYTE $A0,$61
+        BYTE $FE,$20,$20
+        BYTE $A0,$FC
+        BYTE $62    ;JAM 
+        BYTE $6C,$20,$20
+
+        BYTE $20,$20,$20
+        BYTE $20,$20,$20
+        BYTE $20,$19,$00
+        BYTE $20,$A0,$A0
+        BYTE $6C,$61,$E1
+
+        BYTE $A0,$A0
+        BYTE $E1,$A0
+        BYTE $7B,$E1,$A0 ;RRA $A0E1,Y
+        BYTE $A0,$EC
+        BYTE $FE,$20,$20
+        BYTE $62    ;JAM 
+        BYTE $7B,$20,$20 ;RRA $2020,Y
+        BYTE $20,$20,$20
+        BYTE $19,$00,$61
+        BYTE $A0,$A0
+        BYTE $E1,$A0
+        BYTE $7B,$A0,$61 ;RRA $61A0,Y
+        BYTE $A0,$A0
+        BYTE $61,$FE
+        BYTE $A0,$EC
+        BYTE $FE,$A0,$20
+        BYTE $20,$A0,$A0
+        BYTE $EC,$62,$20
+        BYTE $20,$20,$19
+        BYTE $00
+        BYTE $FC
+        BYTE $E1,$61
+        BYTE $FE,$A0,$A0
+        BYTE $62    ;JAM 
+        BYTE $FE,$A0,$A0
+        BYTE $FC,$E2,$E2 ;NOP $E2E2,X
+        BYTE $FE,$A0,$A0
+        BYTE $20,$FE,$A0
+        BYTE $A0,$E1
+        BYTE $A0,$7E
+        BYTE $20,$20,$19
+        BYTE $00
+        BYTE $A0
+        BYTE $62    ;JAM 
+        BYTE $7E,$A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$20
+        BYTE $A0,$EC
+        BYTE $7F,$A0,$A0 ;RRA $A0A0,X
+        BYTE $20,$62,$A0
+        BYTE $19,$00,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$7B
+        BYTE $E2,$FE ;NOP #$FE
+        BYTE $A0,$A0
+        BYTE $EC,$20,$A0
+        BYTE $A0,$20
+        BYTE $00
+        BYTE $99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $88
+        BYTE $81,$96
+        BYTE $85,$A0
+        BYTE $82,$85 ;NOP #$85
+        BYTE $85,$8E
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $61,$E1
+        BYTE $A0,$E2
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$20
+        BYTE $00
+        BYTE $A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $61,$E2
+        BYTE $62    ;JAM 
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$90
+        BYTE $8F,$93,$94 ;SAX $9493
+        BYTE $88
+        BYTE $95,$8D
+        BYTE $8F,$95,$93 ;SAX $9395
+        BYTE $8C,$99,$A0
+        BYTE $81,$97
+        BYTE $81,$92
+        BYTE $84,$85
+        BYTE $84,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $90,$8F
+        BYTE $89,$8E ;NOP #$8E
+        BYTE $94,$93
+        BYTE $A0,$81
+        BYTE $8E,$84,$A0
+        BYTE $93,$85 ;AHX ($85),Y
+        BYTE $8E,$94,$85
+        BYTE $8E,$83,$85
+        BYTE $84,$19
+        BYTE $00
+        BYTE $A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$94
+        BYTE $8F,$A0,$92 ;SAX $92A0
+        BYTE $8F,$81,$8D ;SAX $8D81
+        BYTE $A0,$94
+        BYTE $88
+        BYTE $85,$A0
+        BYTE $8D,$81,$9A
+        BYTE $85,$A0
+        BYTE $86,$8F
+        BYTE $92    ;JAM 
+        BYTE $85,$96
+        BYTE $85,$92
+        BYTE $AE,$19,$00
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$19
+        BYTE $00
+        BYTE $20
+        BYTE $20,$7C,$A0
+        BYTE $89,$86 ;NOP #$86
+        BYTE $A0,$99
+        BYTE $8F,$95,$A0 ;SAX $A095
+        BYTE $97,$89 ;SAX $89,Y
+        BYTE $93,$88 ;AHX ($88),Y
+        BYTE $A0,$94
+        BYTE $8F,$A0,$81 ;SAX $81A0
+        BYTE $90,$90
+        BYTE $85,$81
+        BYTE $8C,$19,$00
+        BYTE $62    ;JAM 
+        BYTE $A0,$20
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$A0
+        BYTE $A0,$6C
+        BYTE $A0,$EC
+        BYTE $7E,$7B,$A0
+        BYTE $A0,$90
+        BYTE $92    ;JAM 
+        BYTE $85,$93
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $01,$AC
+        BYTE $A0,$85
+        BYTE $8C,$93,$85
+        BYTE $A0,$A0
+        BYTE $A0,$19
+        BYTE $00
+        BYTE $A0
+        BYTE $EC,$FE,$7E
+        BYTE $6C,$A0,$61
+
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$7C
+        BYTE $7F,$7E,$6C ;RRA $6C7E,X
+        BYTE $A0,$A0
+        BYTE $61,$A0
+        BYTE $A0,$A0
+        BYTE $E2,$FB ;NOP #$FB
+        BYTE $A0,$A0
+        BYTE $A0,$90
+        BYTE $92    ;JAM 
+        BYTE $85,$93
+        BYTE $93,$A0 ;AHX ($A0),Y
+        BYTE $03,$AE ;SLO ($AE,X)
+        BYTE $A0,$A0
+        BYTE $19,$00,$20
+        BYTE $20,$20,$A0
+        BYTE $A0,$A0
+        BYTE $7F,$A0,$EC ;RRA $ECA0,X
+        BYTE $20,$FE,$7B
+        BYTE $A0,$A0
+        BYTE $E2,$FB ;NOP #$FB
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $A0,$19
+        BYTE $00
+        BYTE $20
+        BYTE $20,$20,$7C
+        BYTE $A0,$EC
+        BYTE $FE,$EC,$20
+        BYTE $FE,$A0,$7F
+        BYTE $A0,$7E
+        BYTE $E1,$FF
+        BYTE $A0,$EC
+        BYTE $FB,$A0,$A0 ;ISC $A0A0,Y
+        BYTE $A0,$A0
+        BYTE $A0,$A0
+        BYTE $19,$00,$20
+        BYTE $20,$20,$20
+        BYTE $20,$20,$E2
+        BYTE $20,$FE,$A0
+        BYTE $EC,$FE,$7E
+        BYTE $6C,$A0,$61
+
+        BYTE $A0,$6C
+        BYTE $61,$A0
+        BYTE $EC,$62,$FB
+        BYTE $A0,$A0
+        BYTE $00
+; === TABLE DE DECALAGES D'ECRAN (25 entrees, une par ligne) ===
+; ; Table paralelle poids-faible / poids-fort : decalage = numero_ligne * 40.
+; ; Utilisee par la routine de calcul de pointeur d'ecran ($2BCE) -- ce sont
+; ; des DECALAGES RELATIFS, pas des adresses absolues.
+        BYTE $00
+        BYTE $28
+        BYTE $50,$78
+        BYTE $A0,$C8
+        BYTE $F0,$18
+        BYTE $40
+
+        BYTE $68
+        BYTE $90,$B8
+        BYTE $E0,$08
+        BYTE $30,$58
+        BYTE $80,$A8 ;NOP #$A8
+        BYTE $D0,$F8
+        BYTE $20,$48,$70
+        BYTE $98
+        BYTE $C0,$00
+        BYTE $00
+        BYTE $00
+        BYTE $00
+        BYTE $00
+        BYTE $00
+        BYTE $00
+        BYTE $01,$01
+        BYTE $01,$01
+        BYTE $01,$01
+        BYTE $02    ;JAM 
+        BYTE $02    ;JAM 
+        BYTE $02    ;JAM 
+        BYTE $02    ;JAM 
+        BYTE $02    ;JAM 
+        BYTE $02    ;JAM 
+        BYTE $02    ;JAM 
+        BYTE $03,$03 ;SLO ($03,X)
+        BYTE $03,$03 ;SLO ($03,X)
+        BYTE $03,$28 ;SLO ($28,X)
+        BYTE $04,$00 ;NOP $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+        BYTE $00, $00
+; fin des données
+; === TRAMPOLINE D'APPEL AUTO-MODIFIANT ===
+; ; Mecanisme d'appel indirect generique : recoit une adresse en A(poids
+; ; faible)/X(poids fort), la recopie dans les operandes de deux instructions
+; ; LDA abs,Y et d'un JSR abs situes plus bas (auto-modification), rejoue une
+; ; petite boucle de recopie de parametres (Y decroissant), puis saute a
+; ; l'adresse recue. Utilise par l'interprete bytecode pour appeler des
+; ; routines dont l'adresse est calculee dynamiquement.
+; *=$4257
+        STA $4265
+        STX $4266
+        STA $426C
+        STX $426D
+        DEY 
+        LDA $FFFF,Y  ;[E442] IRQ
+        STA $4276
+        DEY 
+        LDA $FFFF,Y  ;[E442] IRQ
+        STA $4275
+        STY $4278
+        JSR $FFFF    ;[E442] IRQ
+        LDY #$FF
+        BNE $4263
+        RTS 
+
+        BYTE $B4,$B4
+        BYTE $B5,$B5
